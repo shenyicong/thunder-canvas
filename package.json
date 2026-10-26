@@ -1,0 +1,21 @@
+{
+  "name": "thunder-canvas",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "面向 AI 创作的无限画布工作台：可视化创作流程编排 + 多 Agent 协同 + OpenAI 兼容接口生态",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
