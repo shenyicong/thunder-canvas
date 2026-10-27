@@ -72,10 +72,18 @@ export default function App() {
   const pendingRef = useRef(null);
 
   /* ---------------- toast ---------------- */
+  // 去重 + 限流：相同内容不重复堆叠，最多保留 4 条，避免连点「运行」把屏幕糊满
   const toast = useCallback((msg, level = '') => {
-    const id = uid('t');
-    setToasts((t) => t.concat({ id, msg, level }));
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), level === 'err' ? 6000 : 3000);
+    if (msg == null) return;
+    let id;
+    setToasts((t) => {
+      const idx = t.findIndex((x) => x.msg === msg && x.level === level);
+      id = idx >= 0 ? t[idx].id : uid('t');
+      const next = idx >= 0 ? t.slice() : t.concat({ id, msg, level });
+      if (idx >= 0) next[idx] = { id, msg, level };
+      return next.slice(-4); // 最多保留最新 4 条
+    });
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), level === 'err' ? 6000 : 3500);
   }, []);
   const removeToast = useCallback((id) => setToasts((t) => t.filter((x) => x.id !== id)), []);
 
@@ -625,8 +633,15 @@ export default function App() {
   const handleRunResult = (r) => {
     if (!r) return;
     if (r.blocked) {
-      const first = (r.issues && r.issues[0] && r.issues[0].msg) || '请先配置渠道';
-      toast('⚠ ' + first + '\n（已切到「渠道」页，填好 Base URL 与 API Key 再运行）', 'warn');
+      // 把多条配置问题聚合成一条清晰的提示，避免重复刷屏
+      const chans = [...new Set((r.issues || []).map((i) => {
+        const m = (i.msg || '').match(/渠道「([^」]+)」/);
+        return m ? m[1] : null;
+      }).filter(Boolean))];
+      const head = chans.length
+        ? `「${chans[0]}」${chans.length > 1 ? ` 等 ${chans.length} 个渠道` : ''}`
+        : '部分节点';
+      toast(`⚠ 配置未完成：${head} 待填 API Key\n（已切到「渠道」页，填好即可运行 ▶）`, 'warn');
       setTab('channel');
       return;
     }
