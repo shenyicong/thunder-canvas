@@ -1,4 +1,4 @@
-# ⚡ Thunder Canvas
+# ⚡ 雷霆画布（Thunder Canvas）
 
 面向 AI 创作的**无限画布工作台**：把「创作流程可视化编排 + 多 Agent 协同 + OpenAI 兼容接口生态」放在同一张画布上。
 
