@@ -7,6 +7,7 @@
  * ========================================================== */
 import { memo } from 'react';
 import { NODE_TYPES } from '../lib/store.js';
+import { getProvider } from '../lib/providers.js';
 import { renderMarkdown } from '../lib/engine.js';
 
 const STATUS_TEXT = {
@@ -16,44 +17,80 @@ const STATUS_TEXT = {
   error: '失败'
 };
 
-/** 渠道 + 模型选择器：按节点能力过滤，模型可下拉 */
-function ChannelPicker({ cap, node, channels, set }) {
+const CUSTOM_MODEL = '__custom__';
+
+/** 渠道 + 模型选择器：
+ *  渠道按节点能力过滤；模型直接下拉选（服务商目录全量清单 + 渠道自定义模型），
+ *  也支持「自定义…」手填，适配聚合站上的新模型 */
+function ChannelPicker({ cap, node, channels, set, onOpenChannels }) {
   const list = channels.filter((c) => !c.supports || c.supports.includes(cap));
   const cur = channels.find((c) => c.id === node.data.channelId);
-  const models = (cur && cur.models) || [];
-  const dlId = `dl-${node.id}-${cap}`;
+
+  // 模型清单 = 服务商目录中该能力的模型 + 渠道里保存的模型（去重）
+  const provider = cur && getProvider(cur.providerKey);
+  const models = [];
+  const push = (m) => { if (m && !models.includes(m)) models.push(m); };
+  ((provider && provider.models && provider.models[cap]) || []).forEach(push);
+  ((cur && cur.models) || []).forEach(push);
+
+  const model = node.data.model || '';
+  const isCustom = model && !models.includes(model);
 
   return (
-    <div className="nb-row">
-      <select
-        className="nb-select"
-        value={node.data.channelId || ''}
-        onChange={(e) => {
-          const ch = channels.find((c) => c.id === e.target.value);
-          set({ channelId: e.target.value, model: (ch && ch.models && ch.models[0]) || '' });
-        }}
-      >
-        <option value="">选择渠道…</option>
-        {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        {!list.length && <option value="" disabled>（还没有支持该能力的渠道）</option>}
-      </select>
-      <input
-        className="nb-text"
-        list={dlId}
-        placeholder={models[0] || '模型名'}
-        value={node.data.model || ''}
-        onChange={(e) => set({ model: e.target.value })}
-      />
-      <datalist id={dlId}>
-        {models.map((m) => <option key={m} value={m} />)}
-      </datalist>
-    </div>
+    <>
+      <div className="nb-row">
+        <select
+          className="nb-select"
+          value={node.data.channelId || ''}
+          onChange={(e) => {
+            const ch = channels.find((c) => c.id === e.target.value);
+            // 切渠道时自动带出该能力下的第一个模型
+            const p = ch && getProvider(ch.providerKey);
+            const first = (p && p.models && p.models[cap] && p.models[cap][0])
+              || (ch && ch.models && ch.models[0]) || '';
+            set({ channelId: e.target.value, model: first });
+          }}
+        >
+          <option value="">选择渠道…</option>
+          {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {!list.length && <option value="" disabled>（还没有支持该能力的渠道）</option>}
+        </select>
+        <select
+          className="nb-select"
+          value={model ? (isCustom ? CUSTOM_MODEL : model) : ''}
+          disabled={!cur}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === CUSTOM_MODEL) set({ model: '' });
+            else set({ model: v });
+          }}
+        >
+          <option value="">{cur ? '选择模型…' : '先选渠道'}</option>
+          {models.map((m) => <option key={m} value={m}>{m}</option>)}
+          <option value={CUSTOM_MODEL}>自定义…</option>
+        </select>
+      </div>
+      {(isCustom || model === '') && cur && (
+        <input
+          className="nb-text"
+          style={{ marginTop: 4 }}
+          placeholder="手填模型名（聚合站新模型可在这里输入）"
+          value={model}
+          onChange={(e) => set({ model: e.target.value })}
+        />
+      )}
+      {!list.length && onOpenChannels && (
+        <button className="btn nb-link-btn" onClick={onOpenChannels}>
+          → 去右侧「渠道」页新建一个支持{cap === 'video' ? '生视频' : cap === 'image' ? '生图' : '对话'}的渠道
+        </button>
+      )}
+    </>
   );
 }
 
 function NodeCard({
   node, selected, channels, agents, running,
-  onPointerDownCard, onStartLink, onResizeStart, onDataChange, onOpenImagePicker
+  onPointerDownCard, onStartLink, onResizeStart, onDataChange, onOpenImagePicker, onOpenChannels
 }) {
   const def = NODE_TYPES[node.type];
   const status = node.status || 'idle';
@@ -138,7 +175,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <ChannelPicker cap="chat" node={node} channels={channels} set={set} />
+            <ChannelPicker cap="chat" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
             <div
               className={'nb-output' + (node.data.output ? '' : ' empty')}
               dangerouslySetInnerHTML={{
@@ -159,7 +196,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <ChannelPicker cap="image" node={node} channels={channels} set={set} />
+            <ChannelPicker cap="image" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
             <div className="nb-row">
               <select
                 className="nb-select"
@@ -199,7 +236,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <ChannelPicker cap="video" node={node} channels={channels} set={set} />
+            <ChannelPicker cap="video" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
             {node.data.videoUrl
               ? <video src={node.data.videoUrl} controls style={{ width: '100%', marginTop: 6 }} />
               : <div className="nb-hint">暂无视频</div>}

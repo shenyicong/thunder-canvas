@@ -785,6 +785,7 @@ export default function App() {
                 onResizeStart={onResizeStart}
                 onDataChange={onDataChange}
                 onOpenImagePicker={onOpenImagePicker}
+                onOpenChannels={() => setTab('channel')}
               />
             ))}
           </div>

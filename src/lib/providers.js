@@ -35,12 +35,25 @@ export const PROVIDERS = [
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     signup: 'https://open.bigmodel.cn',
     protocol: 'openai',
-    supports: ['chat', 'image'],
+    supports: ['chat', 'image', 'video'],
     models: {
       image: ['cogview-4', 'cogview-3-flash'],
-      chat: ['glm-4-flash', 'glm-4-plus']
+      chat: ['glm-4-flash', 'glm-4-plus'],
+      video: ['cogvideox-3', 'cogvideox-2']
     },
-    note: 'CogView-4 中文理解好，cogview-3-flash 免费'
+    note: 'CogView-4 生图 + CogVideoX 生视频，glm-4-flash 免费',
+    templates: {
+      video: {
+        submitUrl: 'https://open.bigmodel.cn/api/paas/v4/videos/generations',
+        submitBody: '{"model":"{{model}}","prompt":"{{prompt}}"}',
+        taskIdPath: 'id',
+        pollUrl: 'https://open.bigmodel.cn/api/paas/v4/videos/generations/{{taskId}}',
+        resultPath: 'video_result.0.url',
+        statusPath: 'task_status',
+        doneValues: ['SUCCESS'],
+        failValues: ['FAIL']
+      }
+    }
   },
   {
     key: 'volc',
@@ -53,7 +66,11 @@ export const PROVIDERS = [
     models: {
       image: ['doubao-seedream-3-0-t2i-250415'],
       chat: ['doubao-pro-32k'],
-      video: ['doubao-seedance-1-0-pro-250528']
+      video: [
+        'doubao-seedance-1-0-pro-250528',
+        'doubao-seedance-1-0-lite-t2v-250428',
+        'doubao-seedance-1-0-lite-i2v-250428'
+      ]
     },
     note: 'Seedream 生图 + Seedance 生视频；视频走自有异步协议，已内置模板',
     templates: {
@@ -72,16 +89,30 @@ export const PROVIDERS = [
   {
     key: 'dashscope',
     name: '阿里百炼（通义万相）',
-    tag: '国内直连',
+    tag: '国内直连 · 图+视频',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     signup: 'https://bailian.console.aliyun.com',
     protocol: 'openai',
-    supports: ['chat', 'image'],
+    supports: ['chat', 'image', 'video'],
     models: {
       image: ['wanx2.1-t2i-turbo', 'wanx2.1-t2i-plus'],
-      chat: ['qwen-plus', 'qwen-max']
+      chat: ['qwen-plus', 'qwen-max'],
+      video: ['wan2.2-t2v-plus', 'wan2.2-t2v-flash', 'wan2.2-i2v-plus']
     },
-    note: '万相生图，兼容模式下用 OpenAI 路径调用'
+    note: '万相生图 + 通义万相生视频（走原生异步协议，模板已内置）',
+    templates: {
+      video: {
+        submitUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
+        submitHeaders: '{"X-DashScope-Async":"enable"}',
+        submitBody: '{"model":"{{model}}","input":{"prompt":"{{prompt}}"}}',
+        taskIdPath: 'output.task_id',
+        pollUrl: 'https://dashscope.aliyuncs.com/api/v1/tasks/{{taskId}}',
+        resultPath: 'output.video_url',
+        statusPath: 'output.task_status',
+        doneValues: ['SUCCEEDED'],
+        failValues: ['FAILED', 'CANCELED']
+      }
+    }
   },
   {
     key: 'openai',
@@ -94,8 +125,7 @@ export const PROVIDERS = [
     models: {
       image: ['gpt-image-1', 'gpt-image-1-mini', 'dall-e-3'],
       chat: ['gpt-4o-mini', 'gpt-4o'],
-      video: ['sora-2', 'sora-2-pro']
-    },
+      video: ['sora-2', 'sora-2-pro']    },
     note: 'gpt-image-1 质量最好；Sora 走 /videos 异步任务'
   },
   {
@@ -130,7 +160,11 @@ export const PROVIDERS = [
     signup: '',
     protocol: 'openai',
     supports: ['chat', 'image', 'video'],
-    models: { image: ['gpt-image-1', 'flux-pro-1.1'], chat: ['gpt-4o-mini'], video: [] },
+    models: {
+      image: ['gpt-image-1', 'flux-pro-1.1'],
+      chat: ['gpt-4o-mini'],
+      video: ['sora-2', 'kling-v2-master', 'veo3', 'hailuo-02', 'wan2.2-t2v-plus']
+    },
     note: '填你自己的中转站地址，模型名以站点支持为准'
   },
   {
@@ -143,8 +177,8 @@ export const PROVIDERS = [
     supports: ['chat', 'image', 'video'],
     models: {
       image: ['gpt-image-1', 'flux-pro-1.1', 'seedream-3.0'],
-      chat: ['gpt-4o-mini'],
-      video: ['kling-v2', 'hailuo-02', 'veo3']
+      chat: ['gpt-4o-mini', 'claude-sonnet-4', 'deepseek-v3'],
+      video: ['kling-v2-master', 'hailuo-02', 'veo3', 'seedance-1-0-pro', 'wan2.2-t2v-plus', 'vidu-q1']
     },
     note: '一个 Key 调各家模型，适合不想逐个注册的情况'
   },
@@ -158,7 +192,7 @@ export const PROVIDERS = [
     signup: 'https://platform.minimaxi.com',
     protocol: 'custom',
     supports: ['chat', 'video'],
-    models: { chat: ['abab6.5s-chat'], video: ['MiniMax-Hailuo-02', 'video-01'] },
+    models: { chat: ['abab6.5s-chat'], video: ['MiniMax-Hailuo-02', 'T2V-01', 'T2V-01-Director', 'I2V-01', 'video-01'] },
     note: '海螺视频，已内置异步任务模板',
     templates: {
       video: {
@@ -181,7 +215,7 @@ export const PROVIDERS = [
     signup: 'https://klingai.com',
     protocol: 'custom',
     supports: ['video'],
-    models: { video: ['kling-v2', 'kling-v1-6'] },
+    models: { video: ['kling-v2-master', 'kling-v2-1', 'kling-v2', 'kling-v1-6', 'kling-v1-5'] },
     note: '认证走 JWT（AK/SK 签名），建议用聚合站转发；直连需自行生成 token',
     templates: {
       video: {
@@ -204,7 +238,7 @@ export const PROVIDERS = [
     signup: 'https://dev.runwayml.com',
     protocol: 'custom',
     supports: ['video'],
-    models: { video: ['gen4_turbo', 'gen3a_turbo'] },
+    models: { video: ['gen4_turbo', 'gen4_aleph', 'gen3a_turbo'] },
     note: '需指定 X-Runway-Version 头，已放在模板里',
     templates: {
       video: {
@@ -228,7 +262,7 @@ export const PROVIDERS = [
     signup: 'https://lumalabs.ai/dream-machine/api',
     protocol: 'custom',
     supports: ['video'],
-    models: { video: ['ray-2', 'ray-flash-2'] },
+    models: { video: ['ray-2', 'ray-flash-2', 'ray-1-6'] },
     note: '已内置生成 + 轮询模板',
     templates: {
       video: {
@@ -275,7 +309,7 @@ export const PROVIDERS = [
     signup: '',
     protocol: 'openai',
     supports: ['chat', 'video'],
-    models: { chat: ['veo-3'], video: ['veo-3'] },
+    models: { chat: ['veo-3'], video: ['veo-3', 'veo-3-fast'] },
     note: '本机部署的转发服务'
   },
   {

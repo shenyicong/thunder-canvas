@@ -68,7 +68,7 @@ export function ChannelModal({ channel, onClose }) {
       protocol: p.protocol,
       supports: p.supports || ['chat', 'image'],
       templates: p.templates ? JSON.parse(JSON.stringify(p.templates)) : {},
-      models: form.models && form.models.length ? form.models : suggested.slice(0, 3)
+      models: form.models && form.models.length ? form.models : suggested
     });
   };
 

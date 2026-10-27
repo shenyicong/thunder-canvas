@@ -284,6 +284,9 @@ body.dragging .canvas-wrap { cursor: grabbing !important; }
   display: block; background: var(--bg-0);
 }
 .nb-hint { color: var(--txt-2); font-size: 11px; padding: 6px 0; }
+/* 节点内「去创建渠道」跳转按钮 */
+.nb-link-btn { margin-top: 4px; width: 100%; font-size: 11px; padding: 5px 8px; text-align: left; }
+.nb-select:disabled { opacity: .5; cursor: not-allowed; }
 .nb-empty-box {
   border: 1px dashed var(--line-2); border-radius: 6px;
   padding: 22px 8px; text-align: center; color: var(--txt-2);
