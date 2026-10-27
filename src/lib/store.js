@@ -445,7 +445,7 @@ export function loadDemo() {
   });
   addNode('note', 380, 470, {
     text:
-      '👋 欢迎使用 Thunder Canvas\n\n' +
+      '👋 欢迎使用雷霆画布\n\n' +
       '1. 右侧「渠道」填入 Base URL 与 API Key\n' +
       '2. 点「运行全部」看整条创作链路跑起来\n' +
       '3. 拖节点右侧圆点连线，自由编排流程\n' +
