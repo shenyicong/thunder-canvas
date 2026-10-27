@@ -4,6 +4,7 @@
  * ========================================================== */
 import { useState, useEffect } from 'react';
 import { NODE_TYPES, getNode, updateNode, updateNodeData, commit } from '../lib/store.js';
+import { CAP_LABEL } from '../lib/providers.js';
 import { getLogs, clearLogs } from '../lib/engine.js';
 import { useEvent } from '../lib/useStore.js';
 
@@ -291,9 +292,16 @@ export default function Inspector({
                   </span>
                 </div>
                 <div className="desc">{c.baseUrl || '（未填 Base URL）'}</div>
+                <div className="chip-wrap" style={{ margin: '5px 0' }}>
+                  {(c.supports || []).map((x) => (
+                    <span className="cap-badge" key={x}>{CAP_LABEL[x] || x}</span>
+                  ))}
+                  {c.protocol === 'custom' && <span className="cap-badge warn">自定义模板</span>}
+                </div>
                 <div className="desc">
-                  模式：{c.mode} · Key：{c.apiKey ? '已填写' : '未填写'}
-                  {c.models && c.models.length ? ` · ${c.models.length} 个模型` : ''}
+                  Key：{c.apiKey ? '✅ 已填写' : '❌ 未填写'}
+                  {' · '}模型 {c.models ? c.models.length : 0} 个
+                  {' · '}模式 {c.mode}
                 </div>
                 {c.models && c.models.length > 0 && (
                   <div className="chip-wrap" style={{ marginTop: 6 }}>

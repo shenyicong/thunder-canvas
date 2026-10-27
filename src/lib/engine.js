@@ -163,8 +163,22 @@ const Runners = {
     const prompt = buildPrompt(node, ctx);
     if (!prompt) throw new Error('没有提示词（请填写指令或连接上游节点）');
 
+    const model = node.data.model || (ch.models && ch.models[0]) || 'gpt-image-1';
+
+    // 自有协议：走自定义模板
+    if (ch.protocol === 'custom' && ch.templates && ch.templates.image) {
+      const r = await Api.customGenerate(ch, ch.templates.image, {
+        model, prompt,
+        size: node.data.size || '1024x1024',
+        n: node.data.n || 1,
+        image: (ctx.images && ctx.images[0]) || ''
+      }, ctrl, (msg) => setStatus(node, 'running', msg));
+      if (!r.images || !r.images.length) throw new Error('接口未返回图片');
+      return { images: (node.data.images || []).concat(r.images) };
+    }
+
     const urls = await Api.image(ch, {
-      model: node.data.model || 'gpt-image-1',
+      model,
       prompt,
       size: node.data.size || '1024x1024',
       n: parseInt(node.data.n || 1, 10),
@@ -182,9 +196,23 @@ const Runners = {
     const prompt = buildPrompt(node, ctx);
     if (!prompt) throw new Error('没有提示词');
 
+    const model = node.data.model || '';
+
+    // 自有协议：走自定义模板（可灵 / 海螺 / Runway / Luma / 火山 Seedance）
+    if (ch.protocol === 'custom' && ch.templates && ch.templates.video) {
+      setStatus(node, 'running', '提交中…');
+      const r = await Api.customGenerate(ch, ch.templates.video, {
+        model, prompt,
+        image: (ctx.images && ctx.images[0]) || '',
+        duration: node.data.duration || 5
+      }, ctrl, (msg) => setStatus(node, 'running', msg));
+      if (!r.videoUrl) throw new Error('模板未返回视频地址');
+      return { videoUrl: r.videoUrl };
+    }
+
     setStatus(node, 'running', '提交中…');
     const res = await Api.video(ch, {
-      model: node.data.model || '',
+      model,
       prompt,
       image: (ctx.images && ctx.images[0]) || null
     }, ctrl, (msg) => setStatus(node, 'running', msg));
@@ -284,7 +312,47 @@ export async function run(onlyIds = []) {
 
   if (!runnableCount) {
     log('warn', '没有可运行节点（可运行类型：AI 对话 / 生图 / 生视频 / Agent）');
-    return;
+    return { blocked: true, issues: [{ msg: '没有可运行节点' }] };
+  }
+
+  /* ---- 前置配置检查：把"跑了没反应"变成明确的待办 ---- */
+  const issues = [];
+  const isLocal = (u) => /localhost|127\.0\.0\.1/.test(u || '');
+
+  const checkChannel = (ch, owner) => {
+    if (!ch) { issues.push({ nodeId: owner.id, title: owner.title, msg: `${owner.title}：未选择渠道` }); return; }
+    if (!ch.baseUrl) { issues.push({ nodeId: owner.id, title: owner.title, msg: `${owner.title}：渠道「${ch.name}」未填 Base URL` }); return; }
+    if (!ch.apiKey && !isLocal(ch.baseUrl)) {
+      issues.push({ nodeId: owner.id, title: owner.title, msg: `${owner.title}：渠道「${ch.name}」未填 API Key` });
+    }
+  };
+
+  nodes.forEach((n) => {
+    if (!S.NODE_TYPES[n.type].runnable) return;
+    if (n.type === 'agent') {
+      const ids = (n.data.agentIds || []).filter(Boolean);
+      if (!ids.length) issues.push({ nodeId: n.id, title: n.title, msg: `${n.title}：未选择任何 Agent` });
+      ids.forEach((id) => {
+        const ag = S.getAgent(id);
+        if (!ag) return;
+        const ch = S.getChannel(ag.channelId);
+        if (!ch) issues.push({ nodeId: n.id, title: n.title, msg: `${n.title}：Agent「${ag.name}」未绑定渠道` });
+        else checkChannel(ch, { id: n.id, title: `${n.title}（${ag.name}）` });
+      });
+    } else {
+      checkChannel(S.getChannel(n.data.channelId), n);
+    }
+  });
+
+  if (issues.length) {
+    // 去重
+    const uniq = [];
+    const seen = new Set();
+    issues.forEach((i) => { if (!seen.has(i.msg)) { seen.add(i.msg); uniq.push(i); } });
+    uniq.forEach((i) => log('error', '⚠ 配置未完成 —— ' + i.msg));
+    log('warn', '已阻止执行：请先在右侧「渠道」填写 Base URL 和 API Key（或绑定到 Agent 上）');
+    S.emit('needs-config', uniq);
+    return { blocked: true, issues: uniq };
   }
 
   running = true;
@@ -321,6 +389,7 @@ export async function run(onlyIds = []) {
   if (aborted) log('warn', `已停止（成功 ${okCount} / 失败 ${errCount}）`);
   else log(errCount ? 'warn' : 'ok', `执行结束，耗时 ${cost}s，成功 ${okCount} 个，失败 ${errCount} 个`);
   S.commit();
+  return { blocked: false, ok: okCount, err: errCount };
 }
 
 /** 执行单个节点 */

@@ -151,12 +151,35 @@ export function load() {
     if (!raw) return false;
     const obj = JSON.parse(raw);
     if (!obj || !Array.isArray(obj.nodes)) return false;
-    Object.assign(state, emptyState(), obj);
+    Object.assign(state, emptyState(), migrate(obj));
     return true;
   } catch (e) {
     console.warn('[TC] 读取本地数据失败', e);
     return false;
   }
+}
+
+/** 旧版本数据补字段，保证升级后不炸 */
+function migrate(obj) {
+  (obj.channels || []).forEach((c) => {
+    if (!c.supports) c.supports = ['chat', 'image'];
+    if (!c.protocol) c.protocol = 'openai';
+    if (!c.templates) c.templates = {};
+    if (!c.providerKey) c.providerKey = 'custom';
+    if (!c.endpoints) {
+      c.endpoints = {
+        chat: '/chat/completions',
+        image: '/images/generations',
+        video: '/videos/generations',
+        models: '/models'
+      };
+    }
+  });
+  (obj.nodes || []).forEach((n) => {
+    if (!n.status) n.status = 'idle';
+    if (!n.statusText) n.statusText = '';
+  });
+  return obj;
 }
 
 /* ---------- 撤销 / 重做 ---------- */
@@ -300,10 +323,15 @@ export function addChannel(cfg = {}) {
   const ch = {
     id: uid('ch'),
     name: '新渠道',
-    preset: 'custom',
+    providerKey: 'custom',
     baseUrl: '',
     apiKey: '',
     models: [],
+    // openai = 标准路径；custom = 用 templates 里的自定义请求模板
+    protocol: 'openai',
+    // 该渠道能做什么：chat / image / video
+    supports: ['chat', 'image'],
+    templates: {},
     endpoints: {
       chat: '/chat/completions',
       image: '/images/generations',
@@ -395,18 +423,22 @@ export function importJSON(text) {
 
 /** 首次使用时加载的示例流程 */
 export function loadDemo() {
+  // 默认用硅基流动：国内直连、注册送额度，一个 Key 同时能跑文本和生图
   const ch = addChannel({
-    name: '示例渠道（待配置）',
-    preset: 'custom',
-    baseUrl: 'https://api.openai.com/v1',
+    name: '硅基流动（填 Key 即可用）',
+    providerKey: 'siliconflow',
+    baseUrl: 'https://api.siliconflow.cn/v1',
     apiKey: '',
-    models: ['gpt-4o-mini', 'gpt-image-1']
+    models: ['Qwen/Qwen2.5-72B-Instruct', 'Kwai-Kolors/Kolors', 'Qwen/Qwen-Image'],
+    supports: ['chat', 'image'],
+    protocol: 'openai'
   });
+  const CHAT_MODEL = 'Qwen/Qwen2.5-72B-Instruct';
   const ag1 = addAgent({
     name: '创意总监',
     role: '发散创意方向',
     channelId: ch.id,
-    model: 'gpt-4o-mini',
+    model: CHAT_MODEL,
     systemPrompt: '你是资深创意总监，擅长把模糊需求拆解成 3 个具体、有画面感的视觉创意方向。输出使用中文，分点列出。',
     color: '#7c5cff'
   });
@@ -414,7 +446,7 @@ export function loadDemo() {
     name: '提示词工程师',
     role: '创意转生图提示词',
     channelId: ch.id,
-    model: 'gpt-4o-mini',
+    model: CHAT_MODEL,
     systemPrompt: '你是提示词工程师，把创意描述改写成高质量英文生图提示词，包含主体、风格、光线、构图、画质词。只输出提示词本身。',
     color: '#4c8dff'
   });
@@ -422,7 +454,7 @@ export function loadDemo() {
     name: '艺术指导',
     role: '审美把关与风格校正',
     channelId: ch.id,
-    model: 'gpt-4o-mini',
+    model: CHAT_MODEL,
     systemPrompt: '你是艺术指导，从构图、色彩、商业传播角度评估视觉方案，指出问题并给出改进建议。',
     color: '#ff7b4c'
   });
@@ -441,16 +473,20 @@ export function loadDemo() {
   });
   const g = addNode('imagegen', 1180, 60, {
     instruction: '使用上游提示词生成主视觉海报',
-    channelId: ch.id, model: 'gpt-image-1', size: '1024x1024', n: 1
+    channelId: ch.id, model: 'Kwai-Kolors/Kolors', size: '1024x1024', n: 1
   });
   addNode('note', 380, 470, {
     text:
       '👋 欢迎使用雷霆画布\n\n' +
-      '1. 右侧「渠道」填入 Base URL 与 API Key\n' +
-      '2. 点「运行全部」看整条创作链路跑起来\n' +
-      '3. 拖节点右侧圆点连线，自由编排流程\n' +
-      '4. Agent 节点可挂多个 Agent：并行产出 + 汇总收敛\n' +
-      '5. 顶栏「3D 画廊」用 Three.js 立体浏览创作成果'
+      '【第一步】右侧「渠道」→ 双击示例渠道\n' +
+      '　→ 填入硅基流动的 API Key（注册送额度）\n' +
+      '　→ 点「拉模型」验证连通\n\n' +
+      '【第二步】回画布点「▶ 运行全部」\n\n' +
+      '【能做什么】\n' +
+      '· 7 类节点自由连线，编排创作流程\n' +
+      '· Agent 节点挂多个 Agent：并行产出 + 汇总\n' +
+      '· 生图 / 生视频支持 20+ 服务商（含自定义模板）\n' +
+      '· 顶栏「3D 画廊」立体浏览成果'
   });
 
   addEdge(p.id, a1.id);

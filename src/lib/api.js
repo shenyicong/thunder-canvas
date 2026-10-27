@@ -271,3 +271,163 @@ export async function test(channel) {
   }
   return { ok: true, models: list, count: list.length };
 }
+
+/* ==========================================================
+ * 六、自定义请求模板（接入非 OpenAI 协议的服务）
+ * ----------------------------------------------------------
+ * 可灵 / 海螺 / Runway / Luma / 火山 Seedance 等都有自己的
+ * 请求格式和异步轮询流程。用模板描述一次调用即可接入：
+ *
+ * {
+ *   submitUrl:    'https://api.xxx.com/v1/generate',
+ *   submitHeaders:'{"X-Version":"2024-11-06"}',     // 可选，JSON
+ *   submitBody:   '{"model":"{{model}}","prompt":"{{prompt}}"}',
+ *   taskIdPath:   'data.task_id',                    // 异步任务 ID 位置
+ *   pollUrl:      'https://api.xxx.com/v1/tasks/{{taskId}}',
+ *   resultPath:   'data.videos.0.url',               // 结果地址位置
+ *   statusPath:   'data.status',
+ *   doneValues:   ['succeed'],
+ *   failValues:   ['failed']
+ * }
+ *
+ * 占位符：{{key}} {{model}} {{prompt}} {{size}} {{n}}
+ *        {{image}} {{taskId}} {{groupId}} {{duration}}
+ * ========================================================== */
+
+/** 渲染模板里的 {{占位符}} */
+function renderTpl(str, vars) {
+  if (!str) return '';
+  return String(str).replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) => (vars[k] != null ? vars[k] : ''));
+}
+
+/** 把值做 JSON 字符串转义（避免 prompt 里的引号破坏 JSON） */
+function jsonEsc(s) {
+  return JSON.stringify(String(s == null ? '' : s)).slice(1, -1);
+}
+
+/** 简易 JSON Path 取值：'data.0.url' */
+function pickPath(obj, path) {
+  if (!path || obj == null) return null;
+  return String(path).split('.').reduce((o, k) => {
+    if (o == null) return null;
+    return o[k];
+  }, obj);
+}
+
+/**
+ * 执行一次自定义模板调用
+ * @returns {Promise<{images?: string[], videoUrl?: string, raw?: any}>}
+ */
+export async function customGenerate(channel, template, vars, ctrl = null, onProgress = null) {
+  if (!template || !template.submitUrl) {
+    throw new Error('该渠道没有配置「请求模板」，请在渠道设置的高级选项里填写提交地址');
+  }
+
+  const fullVars = { ...vars, key: channel.apiKey || '' };
+
+  // ---- 1. 提交任务 ----
+  const submitUrl = renderTpl(template.submitUrl, fullVars);
+  const headers = { 'Content-Type': 'application/json' };
+  if (channel.apiKey) headers['Authorization'] = 'Bearer ' + channel.apiKey;
+  if (template.submitHeaders) {
+    try {
+      Object.assign(headers, JSON.parse(renderTpl(template.submitHeaders, fullVars)));
+    } catch (e) { /* 头模板写错就忽略，不阻塞主流程 */ }
+  }
+
+  let bodyObj = null;
+  if (template.submitBody) {
+    const rendered = renderTpl(template.submitBody, {
+      ...fullVars,
+      prompt: jsonEsc(vars.prompt),   // prompt 先转义再塞进 JSON
+      image: jsonEsc(vars.image || ''),
+    });
+    try {
+      bodyObj = JSON.parse(rendered);
+    } catch (e) {
+      throw new Error('请求模板的 body 不是合法 JSON：' + e.message);
+    }
+  }
+
+  const res = await fetch(submitUrl, {
+    method: 'POST',
+    headers,
+    body: bodyObj ? JSON.stringify(bodyObj) : undefined,
+    signal: ctrl ? ctrl.signal : undefined
+  });
+
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch (e) { data = text; }
+
+  if (!res.ok) {
+    throw new Error(`提交失败 HTTP ${res.status}：${String(text).slice(0, 300)}`);
+  }
+
+  // ---- 2. 同步返回？ ----
+  const syncResult = pickPath(data, template.resultPath);
+  if (syncResult && !template.pollUrl) {
+    return normalizeByResult(template.resultPath, syncResult);
+  }
+
+  // ---- 3. 异步：取任务 ID 并轮询 ----
+  const taskId = pickPath(data, template.taskIdPath);
+  if (!taskId) {
+    // 有些服务同步返回数组
+    if (syncResult) return normalizeByResult(template.resultPath, syncResult);
+    throw new Error('模板未取到任务 ID，返回体：' + JSON.stringify(data).slice(0, 300));
+  }
+
+  if (onProgress) onProgress('任务已提交（' + taskId + '），等待生成…');
+
+  const pollUrlTpl = template.pollUrl || template.submitUrl + '/{{taskId}}';
+  const maxWait = 6 * 60 * 1000;
+  const interval = 5000;
+  let waited = 0;
+
+  while (waited < maxWait) {
+    await sleep(interval);
+    waited += interval;
+    if (ctrl && ctrl.signal && ctrl.signal.aborted) throw new Error('已取消');
+
+    const purl = renderTpl(pollUrlTpl, { ...fullVars, taskId });
+    const pres = await fetch(purl, {
+      method: 'GET',
+      headers: channel.apiKey ? { Authorization: 'Bearer ' + channel.apiKey } : {},
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    const ptext = await pres.text();
+    let pdata;
+    try { pdata = JSON.parse(ptext); } catch (e) { pdata = ptext; }
+
+    const status = String(pickPath(pdata, template.statusPath) || '').toLowerCase();
+    const failVals = (template.failValues || []).map((v) => String(v).toLowerCase());
+    if (failVals.includes(status)) {
+      throw new Error('生成失败：' + JSON.stringify(pdata).slice(0, 300));
+    }
+
+    const out = pickPath(pdata, template.resultPath);
+    if (out && typeof out === 'string' && out.length > 0) {
+      return normalizeByResult(template.resultPath, out);
+    }
+
+    if (onProgress) onProgress('生成中… ' + Math.round(waited / 1000) + 's（' + (status || 'processing') + '）');
+  }
+  throw new Error('生成超时（6 分钟），任务 ID=' + taskId);
+}
+
+/** 依据结果路径判断是图片还是视频 */
+function normalizeByResult(path, value) {
+  const p = String(path || '').toLowerCase();
+  const v = String(value);
+  if (/video|mp4|\.webm|\.mov/.test(p) || /\.(mp4|webm|mov)(\?|$)/.test(v)) {
+    return { videoUrl: v };
+  }
+  if (Array.isArray(value)) {
+    return { images: value.filter((x) => typeof x === 'string') };
+  }
+  if (/^(https?:\/\/|data:image)/.test(v)) {
+    return { images: [v] };
+  }
+  return { images: [v] };
+}

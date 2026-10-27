@@ -480,16 +480,48 @@ export default function App() {
   };
 
   /* ---------------- 运行 ---------------- */
+  /** 统一处理运行结果：区分「配置未完成」「有节点失败」「全部成功」 */
+  const handleRunResult = (r) => {
+    if (!r) return;
+    if (r.blocked) {
+      const first = (r.issues && r.issues[0] && r.issues[0].msg) || '请先配置渠道';
+      toast('⚠ ' + first + '\n（已切到「渠道」页，填好 Base URL 与 API Key 再运行）', 'warn');
+      setTab('channel');
+      return;
+    }
+    if (r.err) {
+      toast(`❌ ${r.err} 个节点失败，已切到「日志」查看具体原因`, 'err');
+      setTab('log');
+    } else if (r.ok) {
+      toast(`✅ 全部完成，成功 ${r.ok} 个节点`, 'ok');
+    }
+  };
+
   const runAll = async () => {
     setRunning(true);
     setTab('log');
-    try { await Engine.run([]); } finally { setRunning(false); }
+    try {
+      const r = await Engine.run([]);
+      handleRunResult(r);
+    } catch (e) {
+      toast('运行异常：' + String(e.message || e), 'err');
+    } finally {
+      setRunning(false);
+    }
   };
+
   const runSelected = async () => {
     if (!selection.length) return;
     setRunning(true);
     setTab('log');
-    try { await Engine.run(selection); } finally { setRunning(false); }
+    try {
+      const r = await Engine.run(selection);
+      handleRunResult(r);
+    } catch (e) {
+      toast('运行异常：' + String(e.message || e), 'err');
+    } finally {
+      setRunning(false);
+    }
   };
   const doStop = () => Engine.stop();
 

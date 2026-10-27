@@ -16,6 +16,41 @@ const STATUS_TEXT = {
   error: '失败'
 };
 
+/** 渠道 + 模型选择器：按节点能力过滤，模型可下拉 */
+function ChannelPicker({ cap, node, channels, set }) {
+  const list = channels.filter((c) => !c.supports || c.supports.includes(cap));
+  const cur = channels.find((c) => c.id === node.data.channelId);
+  const models = (cur && cur.models) || [];
+  const dlId = `dl-${node.id}-${cap}`;
+
+  return (
+    <div className="nb-row">
+      <select
+        className="nb-select"
+        value={node.data.channelId || ''}
+        onChange={(e) => {
+          const ch = channels.find((c) => c.id === e.target.value);
+          set({ channelId: e.target.value, model: (ch && ch.models && ch.models[0]) || '' });
+        }}
+      >
+        <option value="">选择渠道…</option>
+        {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        {!list.length && <option value="" disabled>（还没有支持该能力的渠道）</option>}
+      </select>
+      <input
+        className="nb-text"
+        list={dlId}
+        placeholder={models[0] || '模型名'}
+        value={node.data.model || ''}
+        onChange={(e) => set({ model: e.target.value })}
+      />
+      <datalist id={dlId}>
+        {models.map((m) => <option key={m} value={m} />)}
+      </datalist>
+    </div>
+  );
+}
+
 function NodeCard({
   node, selected, channels, agents, running,
   onPointerDownCard, onStartLink, onResizeStart, onDataChange, onOpenImagePicker
@@ -103,22 +138,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <div className="nb-row">
-              <select
-                className="nb-select"
-                value={node.data.channelId || ''}
-                onChange={(e) => set({ channelId: e.target.value })}
-              >
-                <option value="">选择渠道…</option>
-                {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <input
-                className="nb-text"
-                placeholder="模型名"
-                value={node.data.model || ''}
-                onChange={(e) => set({ model: e.target.value })}
-              />
-            </div>
+            <ChannelPicker cap="chat" node={node} channels={channels} set={set} />
             <div
               className={'nb-output' + (node.data.output ? '' : ' empty')}
               dangerouslySetInnerHTML={{
@@ -139,22 +159,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <div className="nb-row">
-              <select
-                className="nb-select"
-                value={node.data.channelId || ''}
-                onChange={(e) => set({ channelId: e.target.value })}
-              >
-                <option value="">选择渠道…</option>
-                {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <input
-                className="nb-text"
-                placeholder="模型名"
-                value={node.data.model || ''}
-                onChange={(e) => set({ model: e.target.value })}
-              />
-            </div>
+            <ChannelPicker cap="image" node={node} channels={channels} set={set} />
             <div className="nb-row">
               <select
                 className="nb-select"
@@ -194,22 +199,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <div className="nb-row">
-              <select
-                className="nb-select"
-                value={node.data.channelId || ''}
-                onChange={(e) => set({ channelId: e.target.value })}
-              >
-                <option value="">选择渠道…</option>
-                {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <input
-                className="nb-text"
-                placeholder="模型名"
-                value={node.data.model || ''}
-                onChange={(e) => set({ model: e.target.value })}
-              />
-            </div>
+            <ChannelPicker cap="video" node={node} channels={channels} set={set} />
             {node.data.videoUrl
               ? <video src={node.data.videoUrl} controls style={{ width: '100%', marginTop: 6 }} />
               : <div className="nb-hint">暂无视频</div>}
