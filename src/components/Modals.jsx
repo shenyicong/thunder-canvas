@@ -1,7 +1,7 @@
 /* ==========================================================
  * Modals.jsx —— 渠道 / Agent 编辑弹窗
  * ========================================================== */
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   addChannel, addAgent, commit, getChannel
 } from '../lib/store.js';
@@ -49,8 +49,15 @@ export function ChannelModal({ channel, onClose }) {
     }));
   const [advanced, setAdvanced] = useState(false);
   const [tplTab, setTplTab] = useState('video');
+  const keyRef = useRef(null);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+  // 打开弹窗时自动聚焦 API Key 输入框：用户只需粘贴即可
+  useEffect(() => {
+    const t = setTimeout(() => keyRef.current && keyRef.current.focus(), 50);
+    return () => clearTimeout(t);
+  }, []);
 
   /** 选择服务商：一次性把地址、协议、能力、模型、模板都带上 */
   const applyProvider = (key) => {
@@ -174,13 +181,14 @@ export function ChannelModal({ channel, onClose }) {
       <div className="field">
         <label>API Key <span style={{ color: 'var(--err)' }}>（必填，否则无法生成）</span></label>
         <input
+          ref={keyRef}
           className="inp"
           type="password"
-          placeholder="sk-..."
+          placeholder="粘贴你的 API Key，如 sk-..."
           value={form.apiKey}
           onChange={(e) => set({ apiKey: e.target.value })}
         />
-        <div className="desc">只存在你浏览器本地，不会上传到任何服务器。</div>
+        <div className="desc">只存在你浏览器本地，不会上传到任何服务器。填好后点「保存并启用」，再到画布点 ▶ 运行全部。</div>
       </div>
 
       {/* ---------- 模型 ---------- */}

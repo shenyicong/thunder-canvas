@@ -641,8 +641,10 @@ export default function App() {
       const head = chans.length
         ? `「${chans[0]}」${chans.length > 1 ? ` 等 ${chans.length} 个渠道` : ''}`
         : '部分节点';
-      toast(`⚠ 配置未完成：${head} 待填 API Key\n（已切到「渠道」页，填好即可运行 ▶）`, 'warn');
+      toast(`⚠ 配置未完成：${head} 待填 API Key\n（已打开渠道，粘贴 Key 即可运行 ▶）`, 'warn');
       setTab('channel');
+      const need = st.channels.find((c) => !c.apiKey);
+      if (need) setModal({ type: 'channel', id: need.id });
       return;
     }
     if (r.err) {
@@ -719,7 +721,10 @@ export default function App() {
     setShowTemplates(false);
     setSelection([]);
     setTimeout(fit, 60);
-    toast('已套用模板：去右侧「渠道」填好 Key 即可运行 ▶', 'ok');
+    // 自动定位到首个待填 Key 的渠道，用户只需粘贴 Key 即可
+    const need = st.channels.find((c) => !c.apiKey);
+    if (need) { setTab('channel'); setModal({ type: 'channel', id: need.id }); }
+    toast('已套用模板：右侧弹窗粘贴 API Key 即可运行 ▶', 'ok');
   };
   const doSaveCurrent = (name, desc) => {
     const tpl = snapshotAsTemplate(name, desc, ['我的模板']);
