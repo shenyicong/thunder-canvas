@@ -12,7 +12,7 @@ export default function Topbar({
     <header className="topbar">
       <div className="brand">
         <span className="brand-logo">⚡</span>
-        <span className="brand-name">Thunder Canvas</span>
+        <span className="brand-name">雷霆画布</span>
       </div>
 
       <div className="tb-group">
