@@ -83,8 +83,9 @@ export default function Sidebar({ agents, channels, onAddNode, onEditAgent, onEd
 
       <div className="side-foot">
         <div className="shortcut-tip">
-          <div><kbd>滚轮</kbd> 缩放 · <kbd>空格/中键</kbd> 平移</div>
-          <div><kbd>拖拽空白</kbd> 框选 · <kbd>拖圆点</kbd> 连线</div>
+          <div><kbd>拖空白</kbd>/<kbd>空格</kbd>/<kbd>中键</kbd> 平移画布</div>
+          <div><kbd>Shift+拖</kbd> 框选 · <kbd>H</kbd>/<kbd>V</kbd> 切工具</div>
+          <div><kbd>滚轮</kbd> 缩放 · <kbd>拖圆点</kbd> 连线</div>
           <div><kbd>Del</kbd> 删除 · <kbd>Ctrl+Z</kbd> 撤销</div>
         </div>
       </div>

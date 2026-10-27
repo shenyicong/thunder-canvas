@@ -15,20 +15,26 @@ export default function EdgeCanvas({
 }) {
   const ref = useRef(null);
   const rafRef = useRef(0);
+  const capRef = useRef({ w: 0, h: 0, dpr: 0 });
 
   useEffect(() => {
     const cv = ref.current;
     if (!cv) return undefined;
 
     const dpr = window.devicePixelRatio || 1;
-    const w = size.width;
-    const h = size.height;
+    const w = Math.round(size.width);
+    const h = Math.round(size.height);
     if (w <= 0 || h <= 0) return undefined;
 
-    cv.width = w * dpr;
-    cv.height = h * dpr;
-    cv.style.width = w + 'px';
-    cv.style.height = h + 'px';
+    // 只在尺寸/DPR 变化时重建位图，避免拖拽时每帧重建导致卡顿
+    const cap = capRef.current;
+    if (cap.w !== w || cap.h !== h || cap.dpr !== dpr) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      cv.style.width = w + 'px';
+      cv.style.height = h + 'px';
+      capRef.current = { w, h, dpr };
+    }
 
     const ctx = cv.getContext('2d');
     const nodeMap = {};

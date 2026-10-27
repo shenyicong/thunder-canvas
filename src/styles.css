@@ -157,8 +157,46 @@ kbd {
   flex: 1; position: relative; overflow: hidden;
   background: var(--canvas-bg); min-width: 0;
   user-select: none;
+  touch-action: none; /* 触屏拖拽平移画布，避免被浏览器当成页面滚动 */
 }
 .canvas-wrap.grab { cursor: grab; }
+/* 抓手工具：空白处直接拖拽平移 */
+.canvas-wrap.tool-hand { cursor: grab; }
+.canvas-wrap.tool-hand:active { cursor: grabbing; }
+/* 框选工具：十字光标 */
+.canvas-wrap.tool-select { cursor: default; }
+body.dragging .canvas-wrap { cursor: grabbing !important; }
+
+/* 画布上常驻的「抓手」按钮（触手）：拖它即可平移 */
+.pan-handle {
+  position: absolute;
+  left: 50%; bottom: 18px;
+  transform: translateX(-50%);
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: rgba(18, 22, 28, .82);
+  border: 1px solid var(--line-2);
+  color: var(--txt-1);
+  font-size: 21px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab;
+  z-index: 30;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  user-select: none;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.pan-handle:hover { border-color: var(--accent); color: #fff; }
+.pan-handle:active { cursor: grabbing; background: rgba(30, 36, 47, .96); }
+.pan-handle::after {
+  content: "拖我平移";
+  position: absolute; top: -22px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px; color: var(--txt-2); white-space: nowrap;
+  opacity: 0; transition: opacity .15s;
+}
+.pan-handle:hover::after { opacity: 1; }
 
 .grid-canvas, .edge-canvas {
   position: absolute; left: 0; top: 0;
@@ -166,7 +204,10 @@ kbd {
 }
 .grid-canvas { z-index: 0; }
 .edge-canvas { z-index: 1; }
-.node-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2; }
+.node-layer {
+  position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2;
+  will-change: transform;   /* 平移/缩放走合成层，减少重绘卡顿 */
+}
 
 /* ---------- 节点 ---------- */
 .node {
@@ -311,12 +352,13 @@ kbd {
 
 .canvas-hud {
   position: absolute; left: 12px; bottom: 12px;
-  display: flex; gap: 12px;
+  display: flex; gap: 12px; flex-wrap: wrap;
   font-size: 11px; color: var(--txt-2);
   background: rgba(12, 15, 20, .85); padding: 4px 8px;
   border-radius: 6px; border: 1px solid var(--line);
   pointer-events: none; z-index: 15;
 }
+.canvas-hud .hud-tip { color: var(--txt-2); opacity: .8; }
 
 /* ==========================================================
    右侧面板

@@ -3,6 +3,7 @@
  * ========================================================== */
 export default function Topbar({
   scale, running, canUndo, canRedo, hasSelection, showGallery, showMinimap,
+  tool = 'hand', onTool,
   onNew, onImport, onExport, onUndo, onRedo, onDelete, onDuplicate,
   onRunAll, onRunSelected, onStop,
   onZoomIn, onZoomOut, onZoomReset, onFit,
@@ -19,6 +20,22 @@ export default function Topbar({
         <button className="btn" onClick={onNew} title="清空并新建">新建</button>
         <button className="btn" onClick={onImport} title="导入 JSON">导入</button>
         <button className="btn" onClick={onExport} title="导出 JSON">导出</button>
+      </div>
+
+      <div className="tb-divider" />
+
+      {/* 工具：抓手 / 框选 */}
+      <div className="tb-group tool-switch">
+        <button
+          className={'btn icon' + (tool === 'hand' ? ' active' : '')}
+          onClick={() => onTool && onTool('hand')}
+          title="抓手（H）：在空白处拖拽直接平移画布"
+        >✋</button>
+        <button
+          className={'btn icon' + (tool === 'select' ? ' active' : '')}
+          onClick={() => onTool && onTool('select')}
+          title="框选（V）：拖拽空白框选节点；按住 Shift 可临时反向"
+        >⬚</button>
       </div>
 
       <div className="tb-divider" />

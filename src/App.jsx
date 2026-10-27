@@ -55,11 +55,16 @@ export default function App() {
   const [showMinimap, setShowMinimap] = useState(true);
   const [tempLink, setTempLink] = useState(null);
   const [marquee, setMarquee] = useState(null);
+  /* 工具：hand = 抓手（空白拖拽平移，默认）；select = 框选 */
+  const [tool, setTool] = useState('hand');
 
   const wrapRef = useRef(null);
   const spaceRef = useRef(false);
   const dragRef = useRef({ mode: null });
   const fileRef = useRef(null);
+  const vpRef = useRef(vp);          // 交互回调读最新视口，避免闭包过期
+  const rafRef = useRef(0);          // 鼠标事件按帧合并，避免每次 mousemove 都重渲染
+  const pendingRef = useRef(null);
 
   /* ---------------- toast ---------------- */
   const toast = useCallback((msg, level = '') => {
@@ -93,20 +98,58 @@ export default function App() {
   }, []);
 
   /* ---------------- 视口持久化（不进历史） ---------------- */
-  useEffect(() => { st.viewport = { ...vp }; }, [vp, st]);
+  useEffect(() => {
+    vpRef.current = vp;
+    st.viewport = { ...vp };
+  }, [vp, st]);
 
-  /* ---------------- 缩放（滚轮，以鼠标为锚点） ---------------- */
+  /* ---------------- 滚轮：缩放 / 平移 ---------------- */
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return undefined;
+
+    /** 只有「真的能滚动」的元素才吞掉滚轮（如文本溢出的 textarea），
+     *  否则在节点上滚动也应该缩放画布 —— 这是 Figma / tldraw 的手感 */
+    const canScroll = (node) => {
+      let cur = node;
+      while (cur && cur !== document.body && cur !== el) {
+        if (cur.nodeType === 1) {
+          const s = getComputedStyle(cur);
+          const oy = s.overflowY;
+          const ox = s.overflowX;
+          if ((oy === 'auto' || oy === 'scroll') && cur.scrollHeight > cur.clientHeight + 1) return true;
+          if ((ox === 'auto' || ox === 'scroll') && cur.scrollWidth > cur.clientWidth + 1) return true;
+        }
+        cur = cur.parentElement;
+      }
+      return false;
+    };
+
     const onWheel = (e) => {
+      if (e.target && e.target.nodeType === 1 && canScroll(e.target)) return; // 让元素自己滚
+
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
 
+      // 统一成像素，兼容 Firefox 的「按行/按页」滚动
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1;
+      const dx = e.deltaX * unit;
+      const dy = e.deltaY * unit;
+
+      // Shift + 滚轮 → 横向平移；触摸板横扫 → 平移，都不缩放
+      if (e.shiftKey) {
+        setVp((v) => ({ ...v, x: v.x - dy }));
+        return;
+      }
+      if (Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 3) {
+        setVp((v) => ({ ...v, x: v.x - dx }));
+        return;
+      }
+
       setVp((v) => {
-        const factor = Math.exp(-e.deltaY * 0.0016);
+        const factor = Math.exp(-dy * 0.0015);
         const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale * factor));
         if (next === v.scale) return v;
         // 保持鼠标下的世界点不动
@@ -115,65 +158,108 @@ export default function App() {
         return { scale: next, x: mx - wx * next, y: my - wy * next };
       });
     };
+
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
   /* ---------------- 全局鼠标移动 / 抬起 ---------------- */
   useEffect(() => {
+    /** 按帧合并渲染：一帧内多次 mousemove 只触发一次重绘，拖拽/平移明显更跟手 */
+    const schedule = (fn) => {
+      pendingRef.current = fn;
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        const f = pendingRef.current;
+        pendingRef.current = null;
+        if (f) f();
+      });
+    };
+    const flush = () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+      const f = pendingRef.current;
+      pendingRef.current = null;
+      if (f) f();
+    };
+
     const onMove = (e) => {
       const d = dragRef.current;
       if (!d.mode) return;
       const rect = wrapRef.current.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
+      const { scale } = vpRef.current;
 
       if (d.mode === 'pan') {
-        setVp((v) => ({ ...v, x: d.startVp.x + (e.clientX - d.startScreen.x), y: d.startVp.y + (e.clientY - d.startScreen.y) }));
+        const dx = e.clientX - d.startScreen.x;
+        const dy = e.clientY - d.startScreen.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+        const nx = d.startVp.x + dx;
+        const ny = d.startVp.y + dy;
+        schedule(() => setVp((v) => (v.x === nx && v.y === ny ? v : { ...v, x: nx, y: ny })));
       } else if (d.mode === 'move') {
-        const dx = (e.clientX - d.startClient.x) / vp.scale;
-        const dy = (e.clientY - d.startClient.y) / vp.scale;
-        Object.keys(d.nodeStart).forEach((id) => {
-          const n = getNode(id);
-          if (!n) return;
-          const s = d.nodeStart[id];
-          n.x = Math.round(s.x + dx);
-          n.y = Math.round(s.y + dy);
-        });
+        const dx = (e.clientX - d.startClient.x) / scale;
+        const dy = (e.clientY - d.startClient.y) / scale;
         d.moved = true;
-        // 直接改对象后需要触发重渲染（不写历史）
-        setVp((v) => ({ ...v }));
-      } else if (d.mode === 'resize') {
-        const n = getNode(d.resizeId);
-        if (n) {
-          n.w = Math.max(140, d.startSize.w + (e.clientX - d.startClient.x) / vp.scale);
-          n.h = Math.max(90, d.startSize.h + (e.clientY - d.startClient.y) / vp.scale);
+        schedule(() => {
+          Object.keys(d.nodeStart).forEach((id) => {
+            const n = getNode(id);
+            if (!n) return;
+            const s = d.nodeStart[id];
+            n.x = Math.round(s.x + dx);
+            n.y = Math.round(s.y + dy);
+          });
+          // 直接改对象后需要触发重渲染（不写历史）
           setVp((v) => ({ ...v }));
-        }
-        d.moved = true;
-      } else if (d.mode === 'link') {
-        setTempLink({ sourceId: d.linkSourceId, point: { x: sx, y: sy } });
-      } else if (d.mode === 'marquee') {
-        setMarquee({
-          x: Math.min(d.startClient.x - rect.left, sx),
-          y: Math.min(d.startClient.y - rect.top, sy),
-          w: Math.abs(sx - (d.startClient.x - rect.left)),
-          h: Math.abs(sy - (d.startClient.y - rect.top))
         });
+      } else if (d.mode === 'resize') {
+        d.moved = true;
+        schedule(() => {
+          const n = getNode(d.resizeId);
+          if (n) {
+            n.w = Math.max(140, d.startSize.w + (e.clientX - d.startClient.x) / scale);
+            n.h = Math.max(90, d.startSize.h + (e.clientY - d.startClient.y) / scale);
+            setVp((v) => ({ ...v }));
+          }
+        });
+      } else if (d.mode === 'link') {
+        schedule(() => setTempLink({ sourceId: d.linkSourceId, point: { x: sx, y: sy } }));
+      } else if (d.mode === 'marquee') {
+        const x0 = d.startClient.x - rect.left;
+        const y0 = d.startClient.y - rect.top;
+        schedule(() => setMarquee({
+          x: Math.min(x0, sx),
+          y: Math.min(y0, sy),
+          w: Math.abs(sx - x0),
+          h: Math.abs(sy - y0)
+        }));
       }
     };
 
     const onUp = (e) => {
       const d = dragRef.current;
       if (!d.mode) return;
+      flush();
+
       const rect = wrapRef.current.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
+      const cur = vpRef.current;
 
-      if (d.mode === 'marquee') {
+      if (d.mode === 'pan') {
+        // 只是点了一下空白（没有拖动）→ 取消选择
+        if (!d.moved) {
+          setSelection([]);
+          setSelEdges([]);
+        }
+      } else if (d.mode === 'marquee') {
         // 框选：世界坐标矩形与节点求交
-        const a = toWorld({ x: d.startClient.x - rect.left, y: d.startClient.y - rect.top }, vp);
-        const b = toWorld({ x: sx, y: sy }, vp);
+        const a = toWorld({ x: d.startClient.x - rect.left, y: d.startClient.y - rect.top }, cur);
+        const b = toWorld({ x: sx, y: sy }, cur);
         const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x);
         const y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
         const hit = st.nodes
@@ -184,7 +270,7 @@ export default function App() {
         setMarquee(null);
       } else if (d.mode === 'link') {
         // 判断是否落在某个节点上
-        const wpt = toWorld({ x: sx, y: sy }, vp);
+        const wpt = toWorld({ x: sx, y: sy }, cur);
         const target = st.nodes.find((n) =>
           wpt.x >= n.x && wpt.x <= n.x + n.w && wpt.y >= n.y && wpt.y <= n.y + n.h);
         if (target && target.id !== d.linkSourceId) {
@@ -202,11 +288,22 @@ export default function App() {
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    // 拖到窗口外松手时（收不到 mouseup）兜底复位，避免一直卡在拖拽态
+    const onBlur = () => {
+      if (dragRef.current.mode) {
+        dragRef.current = { mode: null };
+        setMarquee(null);
+        setTempLink(null);
+        document.body.classList.remove('dragging');
+      }
+    };
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('blur', onBlur);
     };
-  }, [vp, st, toast]);
+  }, [st, toast]);
 
   /* ---------------- 键盘快捷键 ---------------- */
   useEffect(() => {
@@ -236,6 +333,10 @@ export default function App() {
         e.preventDefault(); doExport();
       } else if (ctrl && e.key === '1') {
         e.preventDefault(); fit();
+      } else if (e.key === 'h' || e.key === 'H') {
+        setTool('hand');
+      } else if (e.key === 'v' || e.key === 'V') {
+        setTool('select');
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault(); doDelete();
       } else if (e.key === 'Escape') {
@@ -261,13 +362,16 @@ export default function App() {
 
   /* ---------------- 交互回调 ---------------- */
 
-  /** 背景按下：判断是否点中连线 → 平移 → 框选 */
+  /** 背景按下：中键/右键/空格 → 平移；左键按当前工具决定「平移」还是「框选」 */
   const onBackgroundDown = (e) => {
+    const cur = vpRef.current;
+
+    // 中键 / 右键 / 空格：任何工具下都平移
     if (e.button === 1 || e.button === 2 || spaceRef.current) {
       dragRef.current = {
         mode: 'pan',
         startScreen: { x: e.clientX, y: e.clientY },
-        startVp: { x: vp.x, y: vp.y }
+        startVp: { x: cur.x, y: cur.y }
       };
       document.body.classList.add('dragging');
       e.preventDefault();
@@ -277,20 +381,52 @@ export default function App() {
 
     const rect = wrapRef.current.getBoundingClientRect();
     const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    const edge = hitTestEdge(pt, st.nodes, st.edges, vp);
+    const edge = hitTestEdge(pt, st.nodes, st.edges, cur);
     if (edge) {
       setSelEdges([edge.id]);
       setSelection([]);
       return;
     }
 
-    // 空白：框选
+    /* 抓手工具（默认）：空白处左键拖拽 = 平移画布
+     * 例外：按住 Shift 或切到「框选」工具时，才是框选 */
+    const wantMarquee = tool === 'select' ? !e.shiftKey : (e.shiftKey || e.ctrlKey || e.metaKey);
+
+    if (!wantMarquee) {
+      // 先不取消选择：拖动=平移，单击（未移动）才取消选择
+      dragRef.current = {
+        mode: 'pan',
+        startScreen: { x: e.clientX, y: e.clientY },
+        startVp: { x: cur.x, y: cur.y },
+        moved: false
+      };
+      document.body.classList.add('dragging');
+      e.preventDefault();
+      return;
+    }
+
+    // 框选
     setSelection([]);
     setSelEdges([]);
     dragRef.current = {
       mode: 'marquee',
       startClient: { x: e.clientX, y: e.clientY }
     };
+  };
+
+  /** 画布上常驻「抓手」按钮（触手）：拖它即可平移，不依赖整屏拖拽 */
+  const onPanHandleDown = (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const cur = vpRef.current;
+    dragRef.current = {
+      mode: 'pan',
+      startScreen: { x: e.clientX, y: e.clientY },
+      startVp: { x: cur.x, y: cur.y },
+      moved: false
+    };
+    document.body.classList.add('dragging');
   };
 
   /** 节点按下：选中 + 准备拖动 */
@@ -570,6 +706,8 @@ export default function App() {
       <Topbar
         scale={vp.scale}
         running={running}
+        tool={tool}
+        onTool={setTool}
         canUndo={canUndo()}
         canRedo={canRedo()}
         hasSelection={selection.length > 0}
@@ -609,7 +747,7 @@ export default function App() {
 
         {/* ---------- 画布 ---------- */}
         <main
-          className="canvas-wrap"
+          className={`canvas-wrap tool-${tool}`}
           ref={wrapRef}
           onMouseDown={onBackgroundDown}
           onContextMenu={(e) => e.preventDefault()}
@@ -666,9 +804,20 @@ export default function App() {
             onJump={jumpTo}
           />
 
+          <button
+            className="pan-handle"
+            onMouseDown={onPanHandleDown}
+            title="抓手（触手）：拖我平移画布（任何工具下都能用）"
+          >✋</button>
+
           <div className="canvas-hud">
             <span>{st.nodes.length} 节点 · {st.edges.length} 连线</span>
             <span>缩放 {Math.round(vp.scale * 100)}%</span>
+            <span className="hud-tip">
+              {tool === 'hand'
+                ? '✋ 拖空白平移 · Shift+拖 框选 · H 切换'
+                : '⬚ 拖空白框选 · 空格/中键 平移 · V 切换'}
+            </span>
           </div>
         </main>
 

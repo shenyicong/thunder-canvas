@@ -89,6 +89,13 @@ export default function Minimap({ nodes, viewport, size, onJump, visible }) {
     ctx.fillRect(vp0.x, vp0.y, vw, vh);
   }, [nodes, viewport, size.width, size.height, visible, computeBox]);
 
+  /** 窗口外松手也要复位拖动状态 */
+  useEffect(() => {
+    const up = () => { draggingRef.current = false; };
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, []);
+
   /** 点击/拖拽跳转：把小地图坐标换算成世界坐标，居中到视口 */
   const jump = (ev) => {
     const box = boxRef.current;
@@ -106,7 +113,13 @@ export default function Minimap({ nodes, viewport, size, onJump, visible }) {
       <canvas
         ref={ref}
         style={{ width: size.width, height: size.height, display: 'block', cursor: 'pointer' }}
-        onMouseDown={(e) => { draggingRef.current = true; jump(e); }}
+        onMouseDown={(e) => {
+          // 阻止冒泡：否则点小地图会同时触发画布平移，手感打架
+          e.stopPropagation();
+          e.preventDefault();
+          draggingRef.current = true;
+          jump(e);
+        }}
         onMouseMove={(e) => { if (draggingRef.current) jump(e); }}
         onMouseUp={() => { draggingRef.current = false; }}
         onMouseLeave={() => { draggingRef.current = false; }}

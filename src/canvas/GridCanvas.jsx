@@ -5,24 +5,35 @@
  *   缩放时点阵密度、线宽都需要随 scale 平滑变化，
  *   Canvas 可以做到「缩放自适应层级」（类似 Figma），
  *   且大量点阵时性能远好于 DOM/CSS 重排。
+ *
+ * 性能要点（平移手感的关键）：
+ *   1. canvas.width 只在「视口尺寸 / DPR」变化时才重设 ——
+ *      重设会丢弃并重建整个位图，若每帧都做，平移必然卡顿。
+ *   2. 点用 fillRect 而不是 arc + fill，避免每点一次路径构建。
  * ========================================================== */
 import { useEffect, useRef } from 'react';
 
 export default function GridCanvas({ viewport, size }) {
   const ref = useRef(null);
+  const capRef = useRef({ w: 0, h: 0, dpr: 0 });
 
   useEffect(() => {
     const cv = ref.current;
     if (!cv) return;
     const dpr = window.devicePixelRatio || 1;
-    const w = size.width;
-    const h = size.height;
+    const w = Math.round(size.width);
+    const h = Math.round(size.height);
     if (w <= 0 || h <= 0) return;
 
-    cv.width = w * dpr;
-    cv.height = h * dpr;
-    cv.style.width = w + 'px';
-    cv.style.height = h + 'px';
+    // 仅在真正需要时重建位图
+    const cap = capRef.current;
+    if (cap.w !== w || cap.h !== h || cap.dpr !== dpr) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      cv.style.width = w + 'px';
+      cv.style.height = h + 'px';
+      capRef.current = { w, h, dpr };
+    }
 
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -44,16 +55,13 @@ export default function GridCanvas({ viewport, size }) {
     // 大格（每 5 格一条主线）
     const bigStep = s * 5;
 
-    ctx.save();
-
-    // 小点
+    // 小点：批量 fillRect，比逐点 arc 快数倍
+    const r = scale > 1.2 ? 3 : 2;
     ctx.fillStyle = 'rgba(120,140,170,0.22)';
-    const r = scale > 1.2 ? 1.4 : 1;
     for (let px = ox; px < w + s; px += s) {
+      const rx = Math.round(px - r / 2);
       for (let py = oy; py < h + s; py += s) {
-        ctx.beginPath();
-        ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillRect(rx, Math.round(py - r / 2), r, r);
       }
     }
 
@@ -74,18 +82,14 @@ export default function GridCanvas({ viewport, size }) {
     }
 
     // 原点十字，帮助定位
-    const sx = x;
-    const sy = y;
-    if (sx > -50 && sx < w + 50 && sy > -50 && sy < h + 50) {
+    if (x > -50 && x < w + 50 && y > -50 && y < h + 50) {
       ctx.strokeStyle = 'rgba(76,141,255,0.35)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(sx - 8, sy); ctx.lineTo(sx + 8, sy);
-      ctx.moveTo(sx, sy - 8); ctx.lineTo(sx, sy + 8);
+      ctx.moveTo(x - 8, y); ctx.lineTo(x + 8, y);
+      ctx.moveTo(x, y - 8); ctx.lineTo(x, y + 8);
       ctx.stroke();
     }
-
-    ctx.restore();
   }, [viewport, size.width, size.height]);
 
   return <canvas ref={ref} className="grid-canvas" />;
