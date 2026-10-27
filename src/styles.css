@@ -657,3 +657,63 @@ body.dragging .canvas-wrap { cursor: grabbing !important; }
 @media (max-width: 640px) {
   .tpl-grid { grid-template-columns: 1fr; }
 }
+
+/* ==========================================================
+   节点内：统一模型选择器（对标截图「模型下拉面板」）
+   ========================================================== */
+.model-picker { position: relative; }
+.mp-btn {
+  width: 100%; display: flex; align-items: center; gap: 6px;
+  background: var(--bg-1); color: var(--txt-0);
+  border: 1px solid var(--line-2); border-radius: 7px;
+  padding: 6px 8px; font-size: 11px; cursor: pointer; text-align: left;
+}
+.mp-btn.has { border-color: var(--accent, #7c5cff); }
+.mp-btn-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-caret { color: var(--txt-2); flex: 0 0 auto; }
+.mp-cur {
+  margin-top: 4px; font-size: 10px; color: var(--txt-2);
+  display: flex; align-items: center; gap: 4px;
+}
+.mp-need { color: var(--warn); }
+.mp-edit { color: var(--accent, #7c5cff); cursor: pointer; margin-left: auto; }
+.mp-edit:hover { text-decoration: underline; }
+
+.mp-panel {
+  position: absolute; z-index: 60; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 300px; overflow-y: auto;
+  background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 9px;
+  box-shadow: var(--shadow); padding: 6px;
+}
+.mp-search {
+  width: 100%; box-sizing: border-box; margin-bottom: 6px;
+  background: var(--bg-1); color: var(--txt-0);
+  border: 1px solid var(--line-2); border-radius: 6px;
+  padding: 5px 8px; font-size: 11px;
+}
+.mp-group { margin-bottom: 6px; }
+.mp-ghead {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--txt-1); font-weight: 600;
+  padding: 3px 4px; position: sticky; top: 0; background: var(--bg-2);
+}
+.mp-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.mp-provider { padding-left: 4px; }
+.mp-pname {
+  font-size: 10px; color: var(--txt-2); padding: 2px 4px;
+}
+.mp-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 11px;
+  color: var(--txt-0);
+}
+.mp-item:hover { background: var(--bg-3); }
+.mp-item.on { background: var(--accent-soft, rgba(124,92,255,.16)); color: var(--accent, #7c5cff); }
+.mp-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-check { color: var(--accent, #7c5cff); font-weight: 700; }
+.mp-foot {
+  display: flex; gap: 6px; padding-top: 6px; margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.mp-foot .btn { flex: 1; font-size: 11px; padding: 5px 0; }
+

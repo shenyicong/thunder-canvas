@@ -5,9 +5,9 @@
  *       textarea 编辑、图片预览、滚动、复制等原生交互能力，
  *       这是 Figma / tldraw 等成熟画布工具的通用取舍。
  * ========================================================== */
-import { memo } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { NODE_TYPES, getUpstream } from '../lib/store.js';
-import { getProvider } from '../lib/providers.js';
+import { getProvider, PROVIDERS } from '../lib/providers.js';
 import { renderMarkdown, collectUpstream } from '../lib/engine.js';
 
 const STATUS_TEXT = {
@@ -19,78 +19,142 @@ const STATUS_TEXT = {
 
 const CUSTOM_MODEL = '__custom__';
 
-/** 渠道 + 模型选择器：
- *  渠道按节点能力过滤；模型直接下拉选（服务商目录全量清单 + 渠道自定义模型），
- *  也支持「自定义…」手填，适配聚合站上的新模型 */
-function ChannelPicker({ cap, node, channels, set, onOpenChannels }) {
-  const list = channels.filter((c) => !c.supports || c.supports.includes(cap));
-  const cur = channels.find((c) => c.id === node.data.channelId);
+/** 统一模型选择器（对标截图里的「模型下拉面板」）：
+ *  - 列出「已配置渠道」的全部模型 + 「可一键接入」的服务商目录模型
+ *  - 点选即生成：自动确保对应渠道存在并绑定，缺 Key 时弹窗引导填写
+ *  - 底部「配置自定义模型」可接入任意 OpenAI 兼容接口 */
+function ModelPicker({ cap, node, channels, set, onPickModel, onOpenChannel, onOpenChannels }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef(null);
 
-  // 模型清单 = 服务商目录中该能力的模型 + 渠道里保存的模型（去重）
-  const provider = cur && getProvider(cur.providerKey);
-  const models = [];
-  const push = (m) => { if (m && !models.includes(m)) models.push(m); };
-  ((provider && provider.models && provider.models[cap]) || []).forEach(push);
-  ((cur && cur.models) || []).forEach(push);
-
+  const curCh = channels.find((c) => c.id === node.data.channelId);
+  const curProvider = curCh && getProvider(curCh.providerKey);
   const model = node.data.model || '';
-  const isCustom = model && !models.includes(model);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const capModels = (provider, ch) => {
+    if (provider && provider.models && provider.models[cap] && provider.models[cap].length) return provider.models[cap];
+    return (ch && ch.models) || [];
+  };
+
+  // 已配置渠道（支持该能力且有模型）
+  const cfgGroups = channels
+    .filter((c) => !c.supports || c.supports.includes(cap))
+    .map((c) => {
+      const p = getProvider(c.providerKey);
+      return { ch: c, provider: p, models: capModels(p, c) };
+    })
+    .filter((g) => g.models.length);
+
+  // 可一键接入的服务商（目录支持该能力，且尚未建渠道）
+  const cfgKeys = new Set(channels.map((c) => c.providerKey));
+  const catProviders = PROVIDERS.filter((p) => (p.supports || []).includes(cap) && !cfgKeys.has(p.key));
+
+  const ql = q.trim().toLowerCase();
+  const match = (m, pname) => !ql || m.toLowerCase().includes(ql) || (pname || '').toLowerCase().includes(ql);
+
+  const btnLabel = model
+    ? (curProvider ? curProvider.name + ' · ' : '') + model
+    : '选择模型…';
 
   return (
-    <>
-      <div className="nb-row">
-        <select
-          className="nb-select"
-          value={node.data.channelId || ''}
-          onChange={(e) => {
-            const ch = channels.find((c) => c.id === e.target.value);
-            // 切渠道时自动带出该能力下的第一个模型
-            const p = ch && getProvider(ch.providerKey);
-            const first = (p && p.models && p.models[cap] && p.models[cap][0])
-              || (ch && ch.models && ch.models[0]) || '';
-            set({ channelId: e.target.value, model: first });
-          }}
-        >
-          <option value="">选择渠道…</option>
-          {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          {!list.length && <option value="" disabled>（还没有支持该能力的渠道）</option>}
-        </select>
-        <select
-          className="nb-select"
-          value={model ? (isCustom ? CUSTOM_MODEL : model) : ''}
-          disabled={!cur}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === CUSTOM_MODEL) set({ model: '' });
-            else set({ model: v });
-          }}
-        >
-          <option value="">{cur ? '选择模型…' : '先选渠道'}</option>
-          {models.map((m) => <option key={m} value={m}>{m}</option>)}
-          <option value={CUSTOM_MODEL}>自定义…</option>
-        </select>
-      </div>
-      {(isCustom || model === '') && cur && (
-        <input
-          className="nb-text"
-          style={{ marginTop: 4 }}
-          placeholder="手填模型名（聚合站新模型可在这里输入）"
-          value={model}
-          onChange={(e) => set({ model: e.target.value })}
-        />
+    <div className="model-picker" ref={ref}>
+      <button className={'mp-btn' + (model ? ' has' : '')} onClick={() => setOpen((v) => !v)}>
+        <span className="mp-btn-label">{btnLabel}</span>
+        <span className="mp-caret">▾</span>
+      </button>
+
+      {curCh && (
+        <div className="mp-cur">
+          渠道：{curCh.name}
+          {!curCh.apiKey && <span className="mp-need"> · 待填 Key</span>}
+          <span className="mp-edit" onClick={() => onOpenChannel(curCh.id)}>去填</span>
+        </div>
       )}
-      {!list.length && onOpenChannels && (
-        <button className="btn nb-link-btn" onClick={onOpenChannels}>
-          → 去右侧「渠道」页新建一个支持{cap === 'video' ? '生视频' : cap === 'image' ? '生图' : '对话'}的渠道
-        </button>
+
+      {open && (
+        <div className="mp-panel">
+          <input
+            className="mp-search"
+            placeholder="搜索模型 / 服务商…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            autoFocus
+          />
+
+          {!cfgGroups.length && !catProviders.length && (
+            <div className="nb-hint">暂无可用模型，请先在右侧「渠道」接入服务商。</div>
+          )}
+
+          {cfgGroups.map((g) => (
+            <div className="mp-group" key={'c' + g.ch.id}>
+              <div className="mp-ghead">
+                <span className="mp-dot" style={{ background: g.provider ? '#3fb950' : '#888' }} />
+                已配置 · {g.provider ? g.provider.name : g.ch.name}
+              </div>
+              {g.models.filter((m) => match(m, g.provider && g.provider.name)).map((m) => {
+                const on = model === m && node.data.channelId === g.ch.id;
+                return (
+                  <div
+                    key={m}
+                    className={'mp-item' + (on ? ' on' : '')}
+                    onClick={() => { set({ channelId: g.ch.id, model: m }); setOpen(false); }}
+                  >
+                    <span className="mp-name">{m}</span>
+                    {on && <span className="mp-check">✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          {catProviders.length > 0 && (
+            <div className="mp-group">
+              <div className="mp-ghead">
+                <span className="mp-dot" style={{ background: '#7c5cff' }} />
+                可一键接入（点选即建渠道，填 Key 即用）
+              </div>
+              {catProviders.map((p) => (
+                <div className="mp-provider" key={p.key}>
+                  <div className="mp-pname">{p.name}</div>
+                  {(p.models[cap] || []).filter((m) => match(m, p.name)).map((m) => (
+                    <div
+                      key={m}
+                      className={'mp-item' + (model === m && curProvider && curProvider.key === p.key ? ' on' : '')}
+                      onClick={() => { onPickModel(node.id, p.key, m); setOpen(false); }}
+                    >
+                      <span className="mp-name">{m}</span>
+                      {model === m && curProvider && curProvider.key === p.key && <span className="mp-check">✓</span>}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mp-foot">
+            <button className="btn" onClick={() => { setOpen(false); onOpenChannel(); }}>配置自定义模型</button>
+            {onOpenChannels && (
+              <button className="btn" onClick={() => { setOpen(false); onOpenChannels(); }}>管理渠道</button>
+            )}
+          </div>
+        </div>
       )}
-    </>
+    </div>
   );
 }
 
 function NodeCard({
   node, selected, channels, agents, running,
-  onPointerDownCard, onStartLink, onResizeStart, onDataChange, onOpenImagePicker, onOpenChannels
+  onPointerDownCard, onStartLink, onResizeStart, onDataChange, onOpenImagePicker, onOpenChannels,
+  onPickModel, onOpenChannel
 }) {
   const def = NODE_TYPES[node.type];
   const status = node.status || 'idle';
@@ -175,7 +239,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <ChannelPicker cap="chat" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
+            <ModelPicker cap="chat" node={node} channels={channels} set={set} onPickModel={onPickModel} onOpenChannel={onOpenChannel} onOpenChannels={onOpenChannels} />
             <div
               className={'nb-output' + (node.data.output ? '' : ' empty')}
               dangerouslySetInnerHTML={{
@@ -196,7 +260,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <ChannelPicker cap="image" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
+            <ModelPicker cap="image" node={node} channels={channels} set={set} onPickModel={onPickModel} onOpenChannel={onOpenChannel} onOpenChannels={onOpenChannels} />
             <div className="nb-row">
               <select
                 className="nb-select"
@@ -236,7 +300,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <ChannelPicker cap="video" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
+            <ModelPicker cap="video" node={node} channels={channels} set={set} onPickModel={onPickModel} onOpenChannel={onOpenChannel} onOpenChannels={onOpenChannels} />
             {node.data.videoUrl
               ? <video src={node.data.videoUrl} controls style={{ width: '100%', marginTop: 6 }} />
               : <div className="nb-hint">暂无视频</div>}
@@ -261,7 +325,7 @@ function NodeCard({
               value={node.data.instruction || ''}
               onChange={(e) => set({ instruction: e.target.value })}
             />
-            <ChannelPicker cap="image" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
+            <ModelPicker cap="image" node={node} channels={channels} set={set} onPickModel={onPickModel} onOpenChannel={onOpenChannel} onOpenChannels={onOpenChannels} />
             <div className="nb-media">
               {(node.data.images || []).map((u, i) => (
                 <div className="media-item" key={i} style={{ width: '48%' }}>

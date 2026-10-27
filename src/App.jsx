@@ -17,8 +17,9 @@ import {
   commit, undo, redo, canUndo, canRedo,
   load, loadDemo, exportJSON, importJSON, reset,
   getChannel, getNode, uid, removeAgent, removeChannel,
-  loadTemplate, listTemplates, snapshotAsTemplate
+  loadTemplate, listTemplates, snapshotAsTemplate, addChannel
 } from './lib/store.js';
+import { getProvider } from './lib/providers.js';
 import * as Engine from './lib/engine.js';
 import * as Api from './lib/api.js';
 import { hitTestEdge, toWorld } from './canvas/geometry.js';
@@ -713,6 +714,36 @@ export default function App() {
   /* ---------------- 图片节点素材选择 ---------------- */
   const onOpenImagePicker = (nodeId) => setModal({ type: 'image', id: nodeId });
 
+  /** 从模型下拉里选了一个模型：自动确保对应渠道存在并绑定，缺 Key 则引导填写 */
+  const pickModel = (nodeId, providerKey, model) => {
+    const p = getProvider(providerKey);
+    let ch = state.channels.find((c) => c.providerKey === providerKey);
+    if (!ch) {
+      const all = p ? [
+        ...(p.models.chat || []), ...(p.models.image || []), ...(p.models.video || [])
+      ] : [];
+      ch = addChannel({
+        name: p ? p.name : providerKey,
+        providerKey,
+        baseUrl: p ? p.baseUrl : '',
+        supports: p ? p.supports : ['chat', 'image', 'video'],
+        protocol: p ? p.protocol : 'openai',
+        models: all,
+        templates: p ? (p.templates || {}) : {},
+        mode: 'auto'
+      });
+      toast(`已接入「${ch.name}」，粘贴 API Key 即可用`, 'ok');
+    }
+    // 命中已有同服务商渠道时，若它还没这个模型则补进去
+    if (model && ch.models && !ch.models.includes(model)) {
+      ch.models = ch.models.concat(model);
+    }
+    updateNodeData(nodeId, { channelId: ch.id, model });
+    commit();
+    // 缺 Key 直接弹出该渠道，用户只管粘贴
+    if (!ch.apiKey) { setTab('channel'); setModal({ type: 'channel', id: ch.id }); }
+  };
+
   /* ---------------- 模板库（对标 RunningHub） ---------------- */
   const openTemplates = () => { setUserTemplates(getUserTemplates()); setShowTemplates(true); };
   const doLoadTemplate = (key) => {
@@ -834,6 +865,8 @@ export default function App() {
                 onDataChange={onDataChange}
                 onOpenImagePicker={onOpenImagePicker}
                 onOpenChannels={() => setTab('channel')}
+                onPickModel={pickModel}
+                onOpenChannel={(id) => setModal({ type: 'channel', id })}
               />
             ))}
           </div>
