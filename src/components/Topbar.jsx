@@ -7,7 +7,7 @@ export default function Topbar({
   onNew, onImport, onExport, onUndo, onRedo, onDelete, onDuplicate,
   onRunAll, onRunSelected, onStop,
   onZoomIn, onZoomOut, onZoomReset, onFit,
-  onToggleGallery, onToggleMinimap
+  onToggleGallery, onToggleMinimap, onOpenTemplates
 }) {
   return (
     <header className="topbar">
@@ -17,6 +17,7 @@ export default function Topbar({
       </div>
 
       <div className="tb-group">
+        <button className="btn primary soft" onClick={onOpenTemplates} title="工作流模板库（对标 RunningHub）">📚 模板</button>
         <button className="btn" onClick={onNew} title="清空并新建">新建</button>
         <button className="btn" onClick={onImport} title="导入 JSON">导入</button>
         <button className="btn" onClick={onExport} title="导出 JSON">导出</button>

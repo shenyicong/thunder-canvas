@@ -9,6 +9,9 @@
  *   5. 发布订阅：React 用 useSyncExternalStore 订阅 version 变化
  * ========================================================== */
 
+import { getProvider } from './providers.js';
+import { BUILTIN_TEMPLATES, resolveTemplate, getUserTemplates } from './templates.js';
+
 const STORAGE_KEY = 'thunder-canvas:v1';
 const HISTORY_LIMIT = 80;
 
@@ -16,50 +19,71 @@ const HISTORY_LIMIT = 80;
  * 一、节点类型定义
  * runnable 表示该节点是否会被执行引擎调度
  * ---------------------------------------------------------- */
+/* cat 用于侧栏节点库分组：input=输入 · gen=生成 · collab=协作 · out=输出 */
 export const NODE_TYPES = {
   note: {
-    name: '便签', icon: '📝', cls: 't-note',
+    name: '便签', icon: '📝', cls: 't-note', cat: 'input',
     w: 240, h: 150, runnable: false,
     desc: '记录思路 / 说明',
     data: { text: '在这里写下想法…' }
   },
   prompt: {
-    name: '提示词', icon: '✍️', cls: 't-prompt',
+    name: '提示词', icon: '✍️', cls: 't-prompt', cat: 'input',
     w: 260, h: 170, runnable: false,
     desc: '创作流程的起点',
     data: { text: '一只在月球上喝咖啡的橘猫，赛博朋克风格' }
   },
   image: {
-    name: '图片', icon: '🖼️', cls: 't-image',
+    name: '图片', icon: '🖼️', cls: 't-image', cat: 'input',
     w: 260, h: 240, runnable: false,
     desc: '上传 / 展示参考图',
     data: { src: '', caption: '' }
   },
   chat: {
-    name: 'AI 对话', icon: '💬', cls: 't-chat',
+    name: 'AI 对话', icon: '💬', cls: 't-chat', cat: 'gen',
     w: 300, h: 260, runnable: true,
     desc: '调用大模型生成文本',
     data: { instruction: '', model: '', channelId: '', output: '' }
   },
   imagegen: {
-    name: 'AI 生图', icon: '🎨', cls: 't-imagegen',
+    name: 'AI 生图', icon: '🎨', cls: 't-imagegen', cat: 'gen',
     w: 300, h: 300, runnable: true,
     desc: '文生图 / 图生图',
     data: { instruction: '', model: '', channelId: '', size: '1024x1024', n: 1, images: [] }
   },
   videogen: {
-    name: 'AI 生视频', icon: '🎬', cls: 't-videogen',
+    name: 'AI 生视频', icon: '🎬', cls: 't-videogen', cat: 'gen',
     w: 300, h: 280, runnable: true,
     desc: '文字 / 图片生成视频',
     data: { instruction: '', model: '', channelId: '', videoUrl: '', jobId: '' }
   },
+  upscale: {
+    name: 'AI 超清放大', icon: '🔍', cls: 't-upscale', cat: 'gen',
+    w: 300, h: 280, runnable: true,
+    desc: '把上游图片放大 / 高清化',
+    data: { instruction: '', model: '', channelId: '', scale: '4x', images: [] }
+  },
   agent: {
-    name: 'Agent', icon: '🤖', cls: 't-agent',
+    name: 'Agent', icon: '🤖', cls: 't-agent', cat: 'collab',
     w: 330, h: 320, runnable: true,
     desc: '单 / 多 Agent 协同执行',
     data: { agentIds: [], instruction: '', summarizerId: '', outputs: [], summary: '' }
+  },
+  output: {
+    name: '成果汇总', icon: '📦', cls: 't-output', cat: 'out',
+    w: 320, h: 320, runnable: false,
+    desc: '实时汇总上游所有成果（文 / 图 / 视频）',
+    data: {}
   }
 };
+
+/* 侧栏分组展示顺序与中文名 */
+export const NODE_CATEGORIES = [
+  { key: 'input', name: '输入' },
+  { key: 'gen', name: 'AI 生成' },
+  { key: 'collab', name: '协作' },
+  { key: 'out', name: '输出' }
+];
 
 /* ----------------------------------------------------------
  * 二、渠道预设
@@ -483,7 +507,8 @@ export function loadDemo() {
       '　→ 点「拉模型」验证连通\n\n' +
       '【第二步】回画布点「▶ 运行全部」\n\n' +
       '【能做什么】\n' +
-      '· 7 类节点自由连线，编排创作流程\n' +
+      '· 9 类节点自由连线，编排创作流程\n' +
+      '· 顶栏「📚 模板」一键套用现成工作流（对标 RunningHub）\n' +
       '· Agent 节点挂多个 Agent：并行产出 + 汇总\n' +
       '· 生图 / 生视频支持 20+ 服务商（含自定义模板）\n' +
       '· 顶栏「3D 画廊」立体浏览成果'
@@ -495,4 +520,127 @@ export function loadDemo() {
   resetHistory();
   notify();
   save();
+}
+
+/** 把当前画布序列化为一个可由用户保存的模板对象 */
+export function snapshotAsTemplate(name, desc = '', tags = []) {
+  return {
+    key: 'user_' + uid('t'),
+    name: name || '我的工作流',
+    icon: '🧩',
+    desc: desc || '由当前画布保存',
+    tags,
+    builtin: false,
+    // 仅保留运行所需的最小信息，Key 不导出
+    channels: state.channels.map((c) => ({
+      alias: c.id,
+      providerKey: c.providerKey || 'custom',
+      name: c.name,
+      baseUrl: c.baseUrl,
+      supports: c.supports,
+      protocol: c.protocol,
+      models: c.models,
+      mode: c.mode,
+      templates: c.templates || {},
+      endpoints: c.endpoints
+    })),
+    agents: state.agents.map((a) => ({
+      alias: a.id,
+      name: a.name,
+      role: a.role,
+      channelId: a.channelId,
+      model: a.model,
+      systemPrompt: a.systemPrompt,
+      temperature: a.temperature,
+      color: a.color
+    })),
+    nodes: state.nodes.map((n) => ({
+      type: n.type,
+      x: n.x, y: n.y,
+      data: JSON.parse(JSON.stringify(n.data))
+    })),
+    edges: (() => {
+      const idx = {};
+      state.nodes.forEach((n, i) => { idx[n.id] = i; });
+      return state.edges
+        .filter((e) => idx[e.source] != null && idx[e.target] != null)
+        .map((e) => [idx[e.source], idx[e.target]]);
+    })()
+  };
+}
+
+/**
+ * 加载一个工作流模板（对标 RunningHub 的「一键套用工作流」）。
+ * 渠道 / Agent 按 alias 复用已有对象，避免重复堆积；节点与连线全部重建。
+ */
+export function loadTemplate(key) {
+  const tpl = resolveTemplate(key);
+  if (!tpl) { console.warn('[TC] 模板不存在', key); return false; }
+
+  const chMap = {};
+  (tpl.channels || []).forEach((c) => {
+    const alias = c.alias || c.name;
+    // 复用：同名 + 同服务商的渠道直接复用，否则新建
+    let ch = state.channels.find((x) => x.providerKey === c.providerKey && x.name === c.name);
+    if (!ch) {
+      const p = getProvider(c.providerKey);
+      ch = addChannel({
+        name: c.name,
+        providerKey: c.providerKey || 'custom',
+        baseUrl: c.baseUrl != null ? c.baseUrl : (p && p.baseUrl) || '',
+        apiKey: '',
+        supports: c.supports || (p && p.supports) || ['chat', 'image'],
+        protocol: c.protocol || (p && p.protocol) || 'openai',
+        models: c.models && c.models.length ? c.models : (p && p.models && (p.models.image || p.models.chat || [])) || [],
+        mode: c.mode || 'auto',
+        templates: c.templates || (p && p.templates) || {},
+        endpoints: c.endpoints
+      });
+    }
+    chMap[alias] = ch.id;
+  });
+
+  const agMap = {};
+  (tpl.agents || []).forEach((a) => {
+    const alias = a.alias || a.name;
+    let ag = state.agents.find((x) => x.name === a.name);
+    if (!ag) {
+      ag = addAgent({
+        name: a.name,
+        role: a.role || '',
+        channelId: a.channelId ? (chMap[a.channelId] || '') : '',
+        model: a.model || '',
+        systemPrompt: a.systemPrompt || '',
+        temperature: a.temperature != null ? a.temperature : 0.7,
+        color: a.color || '#7c5cff'
+      });
+    }
+    agMap[alias] = ag.id;
+  });
+
+  const idMap = {};
+  (tpl.nodes || []).forEach((n, i) => {
+    const def = NODE_TYPES[n.type];
+    if (!def) return;
+    const data = JSON.parse(JSON.stringify({ ...def.data, ...(n.data || {}) }));
+    if (data.channelId) data.channelId = chMap[data.channelId] || '';
+    if (Array.isArray(data.agentIds)) data.agentIds = data.agentIds.map((x) => agMap[x]).filter(Boolean);
+    if (data.summarizerId) data.summarizerId = agMap[data.summarizerId] || '';
+    const node = addNode(n.type, n.x || i * 360, n.y != null ? n.y : 80, data);
+    idMap[i] = node.id;
+  });
+
+  (tpl.edges || []).forEach(([a, b]) => {
+    if (idMap[a] && idMap[b]) addEdge(idMap[a], idMap[b]);
+  });
+
+  resetHistory();
+  notify();
+  save();
+  return true;
+}
+
+/** 供模板弹窗读取（内置 + 用户） */
+export function listTemplates() {
+  return { builtin: BUILTIN_TEMPLATES, user: getUserTemplates() };
 }

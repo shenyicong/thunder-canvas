@@ -16,11 +16,13 @@ import {
   addNode, addEdge, removeNodes, removeEdges, updateNodeData, updateNode,
   commit, undo, redo, canUndo, canRedo,
   load, loadDemo, exportJSON, importJSON, reset,
-  getChannel, getNode, uid, removeAgent, removeChannel
+  getChannel, getNode, uid, removeAgent, removeChannel,
+  loadTemplate, listTemplates, snapshotAsTemplate
 } from './lib/store.js';
 import * as Engine from './lib/engine.js';
 import * as Api from './lib/api.js';
 import { hitTestEdge, toWorld } from './canvas/geometry.js';
+import { saveUserTemplate, deleteUserTemplate, getUserTemplates } from './lib/templates.js';
 
 import GridCanvas from './canvas/GridCanvas.jsx';
 import EdgeCanvas from './canvas/EdgeCanvas.jsx';
@@ -32,6 +34,7 @@ import Sidebar from './components/Sidebar.jsx';
 import Inspector from './components/Inspector.jsx';
 import NodeCard from './components/NodeCard.jsx';
 import Toasts from './components/Toasts.jsx';
+import TemplateGallery from './components/TemplateGallery.jsx';
 import { ChannelModal, AgentModal } from './components/Modals.jsx';
 
 const MIN_SCALE = 0.15;
@@ -53,6 +56,8 @@ export default function App() {
   const [modal, setModal] = useState(null);       // {type:'channel'|'agent'|'image', id}
   const [showGallery, setShowGallery] = useState(false);
   const [showMinimap, setShowMinimap] = useState(true);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [userTemplates, setUserTemplates] = useState(() => getUserTemplates());
   const [tempLink, setTempLink] = useState(null);
   const [marquee, setMarquee] = useState(null);
   /* 工具：hand = 抓手（空白拖拽平移，默认）；select = 框选 */
@@ -691,6 +696,28 @@ export default function App() {
   /* ---------------- 图片节点素材选择 ---------------- */
   const onOpenImagePicker = (nodeId) => setModal({ type: 'image', id: nodeId });
 
+  /* ---------------- 模板库（对标 RunningHub） ---------------- */
+  const openTemplates = () => { setUserTemplates(getUserTemplates()); setShowTemplates(true); };
+  const doLoadTemplate = (key) => {
+    const ok = loadTemplate(key);
+    if (!ok) { toast('模板加载失败', 'err'); return; }
+    setShowTemplates(false);
+    setSelection([]);
+    setTimeout(fit, 60);
+    toast('已套用模板：去右侧「渠道」填好 Key 即可运行 ▶', 'ok');
+  };
+  const doSaveCurrent = (name, desc) => {
+    const tpl = snapshotAsTemplate(name, desc, ['我的模板']);
+    saveUserTemplate(tpl);
+    setUserTemplates(getUserTemplates());
+    toast('已把当前画布存为模板', 'ok');
+  };
+  const doDeleteUser = (key) => {
+    if (!confirm('删除该模板？')) return;
+    deleteUserTemplate(key);
+    setUserTemplates(getUserTemplates());
+  };
+
   /* ---------------- 正在运行 → 高亮其入边 ---------------- */
   const activeEdgeIds = st.edges
     .filter((e) => {
@@ -733,6 +760,7 @@ export default function App() {
         onFit={fit}
         onToggleGallery={() => setShowGallery(!showGallery)}
         onToggleMinimap={() => setShowMinimap(!showMinimap)}
+        onOpenTemplates={openTemplates}
       />
 
       <div className="body">
@@ -871,6 +899,16 @@ export default function App() {
           nodes={st.nodes}
           onClose={() => setShowGallery(false)}
           onLocate={(id) => { focusNode(id); setShowGallery(false); }}
+        />
+      )}
+
+      {showTemplates && (
+        <TemplateGallery
+          templates={listTemplates()}
+          onClose={() => setShowTemplates(false)}
+          onLoad={doLoadTemplate}
+          onSave={doSaveCurrent}
+          onDeleteUser={doDeleteUser}
         />
       )}
 

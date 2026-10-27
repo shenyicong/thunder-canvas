@@ -31,6 +31,8 @@
 .t-imagegen { --nc: #bc4cff; }
 .t-videogen { --nc: #ff7b4c; }
 .t-agent { --nc: #7c5cff; }
+.t-upscale { --nc: #2dd4bf; }
+.t-output { --nc: #f0883e; }
 
 * { box-sizing: border-box; }
 
@@ -129,6 +131,15 @@ body.dragging { cursor: grabbing !important; user-select: none; }
 .lib-item .li-main { flex: 1; min-width: 0; }
 .lib-item .li-name { font-size: 12px; }
 .lib-item .li-desc { font-size: 10px; color: var(--txt-2); }
+
+/* 节点库分类 */
+.node-cat { margin-bottom: 8px; }
+.node-cat-name {
+  font-size: 10px; font-weight: 700; letter-spacing: .5px;
+  color: var(--txt-2); text-transform: uppercase;
+  margin: 2px 2px 4px; padding-left: 2px;
+  border-left: 2px solid var(--line-2); padding-left: 6px;
+}
 
 .agent-list, .channel-list { display: flex; flex-direction: column; gap: 4px; }
 .list-item {
@@ -583,3 +594,66 @@ body.dragging .canvas-wrap { cursor: grabbing !important; }
 .toast.err { border-color: var(--err); }
 .toast.warn { border-color: var(--warn); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } }
+
+/* ==========================================================
+   顶栏：模板按钮（柔和主色）
+   ========================================================== */
+.btn.primary.soft { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--accent); }
+.btn.primary.soft:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 28%, transparent); color: #fff; }
+
+.muted { color: var(--txt-2); font-weight: 400; font-style: normal; }
+
+/* ==========================================================
+   成果汇总节点（output）
+   ========================================================== */
+.out-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.out-count { font-size: 10px; color: var(--txt-2); }
+.out-scroll { max-height: 210px; overflow-y: auto; padding-right: 4px; }
+.out-block { margin-bottom: 8px; }
+.out-label { font-size: 10px; color: var(--txt-2); font-weight: 700; margin-bottom: 3px; }
+.out-block .nb-output { max-height: none; }
+
+/* ==========================================================
+   模板库弹窗（对标 RunningHub）
+   ========================================================== */
+.tpl-modal { display: flex; flex-direction: column; max-height: 84vh; }
+.tpl-body { flex: 1; }
+.tpl-savebar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 8px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px;
+}
+.tpl-savebar .muted { font-size: 11px; }
+.tpl-save-form { display: flex; align-items: center; gap: 6px; flex: 1; flex-wrap: wrap; }
+.tpl-save-form .inp { width: auto; flex: 1; min-width: 120px; }
+.tpl-section-title {
+  font-size: 11px; font-weight: 700; color: var(--txt-1);
+  margin: 10px 2px 6px;
+}
+.tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tpl-card {
+  display: flex; gap: 10px; padding: 10px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+  transition: border-color .12s, transform .12s;
+}
+.tpl-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.tpl-icon {
+  width: 38px; height: 38px; flex: 0 0 38px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; font-size: 20px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.tpl-main { flex: 1; min-width: 0; }
+.tpl-name { font-size: 13px; font-weight: 600; }
+.tpl-desc { font-size: 11px; color: var(--txt-2); margin: 2px 0 6px; line-height: 1.4; }
+.tpl-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tpl-tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 999px;
+  background: var(--bg-3); color: var(--txt-1); border: 1px solid var(--line);
+}
+.tpl-meta { font-size: 10px; color: var(--txt-2); margin-left: auto; }
+.tpl-actions { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.tpl-actions .btn { width: 64px; padding: 0; }
+
+@media (max-width: 640px) {
+  .tpl-grid { grid-template-columns: 1fr; }
+}

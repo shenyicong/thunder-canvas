@@ -88,6 +88,9 @@ export function collectUpstream(nodeId) {
       case 'imagegen':
         (d.images || []).forEach((u) => images.push(u));
         break;
+      case 'upscale':
+        (d.images || []).forEach((u) => images.push(u));
+        break;
       case 'image':
         if (d.src) images.push(d.src);
         if (d.caption) texts.push('[图片说明] ' + d.caption);
@@ -186,6 +189,32 @@ const Runners = {
     }, ctrl);
 
     if (!urls.length) throw new Error('接口未返回图片');
+    return { images: (node.data.images || []).concat(urls) };
+  },
+
+  /* ---- AI 超清放大：把上游图片放大 / 高清化 ---- */
+  async upscale(node, ctx, ctrl) {
+    const ch = S.getChannel(node.data.channelId);
+    if (!ch) throw new Error('未选择渠道');
+    const src = (ctx.images && ctx.images[0]) || '';
+    if (!src) throw new Error('没有可放大的图片（请连接上游生图 / 图片节点）');
+
+    const prompt = node.data.instruction
+      || `Ultra-high-resolution upscale, ${node.data.scale || '4x'}, ultra-detailed, sharp, clean edges, 8k masterpiecel. Keep the original composition and subject.`;
+    const model = node.data.model || (ch.models && ch.models[0]) || 'gpt-image-1';
+
+    if (ch.protocol === 'custom' && ch.templates && ch.templates.image) {
+      const r = await Api.customGenerate(ch, ch.templates.image, {
+        model, prompt, size: node.data.size || '1024x1024', n: 1, image: src
+      }, ctrl, (msg) => setStatus(node, 'running', msg));
+      if (!r.images || !r.images.length) throw new Error('接口未返回放大后的图片');
+      return { images: (node.data.images || []).concat(r.images) };
+    }
+
+    const urls = await Api.image(ch, {
+      model, prompt, size: node.data.size || '1024x1024', n: 1, image: src
+    }, ctrl);
+    if (!urls.length) throw new Error('接口未返回放大后的图片');
     return { images: (node.data.images || []).concat(urls) };
   },
 

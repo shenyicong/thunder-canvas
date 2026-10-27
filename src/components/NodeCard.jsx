@@ -6,9 +6,9 @@
  *       这是 Figma / tldraw 等成熟画布工具的通用取舍。
  * ========================================================== */
 import { memo } from 'react';
-import { NODE_TYPES } from '../lib/store.js';
+import { NODE_TYPES, getUpstream } from '../lib/store.js';
 import { getProvider } from '../lib/providers.js';
-import { renderMarkdown } from '../lib/engine.js';
+import { renderMarkdown, collectUpstream } from '../lib/engine.js';
 
 const STATUS_TEXT = {
   idle: '',
@@ -242,6 +242,93 @@ function NodeCard({
               : <div className="nb-hint">暂无视频</div>}
           </>
         )}
+
+        {/* AI 超清放大 */}
+        {node.type === 'upscale' && (
+          <>
+            <div className="nb-row">
+              <select
+                className="nb-select"
+                value={node.data.scale || '4x'}
+                onChange={(e) => set({ scale: e.target.value })}
+              >
+                {['2x', '4x', '8x'].map((s) => <option key={s} value={s}>{s} 放大</option>)}
+              </select>
+            </div>
+            <textarea
+              className="nb-input"
+              placeholder="放大要求（可留空，默认高清锐化）"
+              value={node.data.instruction || ''}
+              onChange={(e) => set({ instruction: e.target.value })}
+            />
+            <ChannelPicker cap="image" node={node} channels={channels} set={set} onOpenChannels={onOpenChannels} />
+            <div className="nb-media">
+              {(node.data.images || []).map((u, i) => (
+                <div className="media-item" key={i} style={{ width: '48%' }}>
+                  <img src={u} alt="" />
+                </div>
+              ))}
+              {!(node.data.images || []).length && (
+                <div className="nb-hint">连接上游生图 / 图片节点，运行后在此显示放大结果</div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* 成果汇总（实时聚合上游） */}
+        {node.type === 'output' && (() => {
+          const ctx = collectUpstream(node.id);
+          const allText = ctx.text || '';
+          return (
+            <>
+              <div className="out-actions">
+                <button
+                  className="btn"
+                  disabled={!allText}
+                  onClick={() => navigator.clipboard && navigator.clipboard.writeText(allText)}
+                  title="复制所有文本成果"
+                >复制文本</button>
+                <span className="out-count">
+                  {ctx.images.length} 图 · {ctx.videos.length} 视频 · {allText ? '有文本' : '无文本'}
+                </span>
+              </div>
+              <div className="out-scroll">
+                {ctx.videos.length > 0 && (
+                  <div className="out-block">
+                    <div className="out-label">视频</div>
+                    {ctx.videos.map((u, i) => (
+                      <video key={i} src={u} controls style={{ width: '100%', marginBottom: 6, borderRadius: 5 }} />
+                    ))}
+                  </div>
+                )}
+                {ctx.images.length > 0 && (
+                  <div className="out-block">
+                    <div className="out-label">图片</div>
+                    <div className="nb-media">
+                      {ctx.images.map((u, i) => (
+                        <div className="media-item" key={i} style={{ width: '48%' }}>
+                          <a href={u} target="_blank" rel="noreferrer"><img src={u} alt="" /></a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {allText && (
+                  <div className="out-block">
+                    <div className="out-label">文本</div>
+                    <div
+                      className="nb-output"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(allText) }}
+                    />
+                  </div>
+                )}
+                {!allText && !ctx.images.length && !ctx.videos.length && (
+                  <div className="nb-hint">把其它节点连到本节点，运行后在这里汇总所有成果</div>
+                )}
+              </div>
+            </>
+          );
+        })()}
 
         {/* Agent 节点：多 Agent 协同 */}
         {node.type === 'agent' && (

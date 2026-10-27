@@ -1,32 +1,39 @@
 /* ==========================================================
  * Sidebar.jsx —— 左侧栏：节点库 / Agent / 渠道
  * ========================================================== */
-import { NODE_TYPES } from '../lib/store.js';
+import { NODE_TYPES, NODE_CATEGORIES } from '../lib/store.js';
 
 export default function Sidebar({ agents, channels, onAddNode, onEditAgent, onEditChannel, onSelectAgent }) {
   return (
     <aside className="sidebar-left">
-      {/* ---------- 节点库 ---------- */}
+      {/* ---------- 节点库（按分类） ---------- */}
       <div className="side-section">
         <div className="side-title">
           节点库 <span className="hint">点击添加</span>
         </div>
-        <div className="node-lib">
-          {Object.entries(NODE_TYPES).map(([key, def]) => (
-            <div
-              key={key}
-              className={'lib-item ' + def.cls}
-              onClick={() => onAddNode(key)}
-              title={def.desc}
-            >
-              <span className="li-icon">{def.icon}</span>
-              <span className="li-main">
-                <div className="li-name">{def.name}</div>
-                <div className="li-desc">{def.desc}</div>
-              </span>
+        {NODE_CATEGORIES.map((cat) => (
+          <div className="node-cat" key={cat.key}>
+            <div className="node-cat-name">{cat.name}</div>
+            <div className="node-lib">
+              {Object.entries(NODE_TYPES)
+                .filter(([, def]) => def.cat === cat.key)
+                .map(([key, def]) => (
+                  <div
+                    key={key}
+                    className={'lib-item ' + def.cls}
+                    onClick={() => onAddNode(key)}
+                    title={def.desc}
+                  >
+                    <span className="li-icon">{def.icon}</span>
+                    <span className="li-main">
+                      <div className="li-name">{def.name}</div>
+                      <div className="li-desc">{def.desc}</div>
+                    </span>
+                  </div>
+                ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
 
       {/* ---------- Agent ---------- */}
