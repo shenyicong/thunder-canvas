@@ -717,3 +717,19 @@ body.dragging .canvas-wrap { cursor: grabbing !important; }
 }
 .mp-foot .btn { flex: 1; font-size: 11px; padding: 5px 0; }
 
+/* 厂商图标 / 单价标签 / 节点价格条（对标截图「预计价格」） */
+.mp-icon { flex: 0 0 18px; text-align: center; font-size: 12px; line-height: 1; }
+.mp-price {
+  flex: 0 0 auto; margin-left: 6px;
+  font-size: 10px; color: var(--txt-2);
+  background: var(--bg-3); border-radius: 4px; padding: 1px 5px; white-space: nowrap;
+}
+.mp-price.muted { margin-left: auto; }
+.mp-pname { display: flex; align-items: center; gap: 5px; }
+.mp-pbar {
+  display: flex; align-items: center; gap: 5px;
+  margin-top: 4px; padding: 4px 8px;
+  font-size: 10px; color: var(--txt-1);
+  background: var(--bg-1); border: 1px solid var(--line-2); border-radius: 6px;
+}
+

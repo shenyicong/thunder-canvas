@@ -337,3 +337,32 @@ export const CAP_LABEL = {
   image: '生图',
   video: '生视频'
 };
+
+/* ==========================================================
+ * 厂商元信息：图标 + 预估单价
+ * 说明：各家价格随政策频繁变动，这里给的是「公开价区间的粗略预估」，
+ *       仅用于节点内参考展示（对标截图里的「预计价格/积分」），
+ *       实际以账户扣费为准。新增/调整模型请改 PROVIDERS 上的 models。
+ * ========================================================== */
+export const PROVIDER_META = {
+  siliconflow: { icon: '\u{1F48E}', pricing: { image: '¥0.016/张', chat: '¥0.001/1k字' } },
+  zhipu:       { icon: '\u{1F52E}', pricing: { image: '¥0.10/张', video: '¥0.40/秒', chat: '免费额度' } },
+  volc:        { icon: '\u{1F30B}', pricing: { image: '¥0.02/张', video: '¥0.30/秒', chat: '¥0.003/1k字' } },
+  dashscope:   { icon: '\u{1F409}', pricing: { image: '¥0.06/张', video: '¥0.35/秒', chat: '¥0.004/1k字' } },
+  openai:      { icon: '\u{1F916}', pricing: { image: '¥0.16/张', video: '¥3.0/秒', chat: '¥0.02/1k字' } },
+  deepseek:    { icon: '\u{1F40B}', pricing: { chat: '¥0.001/1k字' } },
+  moonshot:    { icon: '\u{1F319}', pricing: { chat: '¥0.001/1k字' } },
+  newapi:      { icon: '\u{1F517}', pricing: { image: '¥0.02/张', video: '¥0.30/秒', chat: '¥0.002/1k字' } },
+  '302ai':     { icon: '\u{1F39B}️', pricing: { image: '¥0.03/张', video: '¥0.35/秒', chat: '¥0.003/1k字' } },
+  minimax:     { icon: '🎯', pricing: { video: '¥0.25/秒', chat: '¥0.01/1k字' } },
+  kling:       { icon: '\u{1F3AC}', pricing: { video: '¥0.40/秒' } },
+  runway:      { icon: '\u{1F39E}️', pricing: { video: '¥0.50/秒' } },
+  luma:        { icon: '✨', pricing: { video: '¥0.30/秒' } },
+  chatgpt2api: { icon: '\u{1F5A5}️', pricing: { image: '自建', chat: '自建' } },
+  grok2api:    { icon: '⚡', pricing: { image: '自建', chat: '自建' } },
+  flow2api:    { icon: '\u{1F30A}', pricing: { video: '自建', chat: '自建' } },
+  custom:      { icon: '⚙️', pricing: {} }
+};
+
+/** 取厂商元信息（图标 + 单价表），缺省给占位 */
+export const getProviderMeta = (key) => PROVIDER_META[key] || { icon: '\u{1F9E9}', pricing: {} };

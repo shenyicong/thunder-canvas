@@ -7,7 +7,7 @@
  * ========================================================== */
 import { memo, useState, useEffect, useRef } from 'react';
 import { NODE_TYPES, getUpstream } from '../lib/store.js';
-import { getProvider, PROVIDERS } from '../lib/providers.js';
+import { getProvider, PROVIDERS, getProviderMeta } from '../lib/providers.js';
 import { renderMarkdown, collectUpstream } from '../lib/engine.js';
 
 const STATUS_TEXT = {
@@ -31,6 +31,10 @@ function ModelPicker({ cap, node, channels, set, onPickModel, onOpenChannel, onO
   const curCh = channels.find((c) => c.id === node.data.channelId);
   const curProvider = curCh && getProvider(curCh.providerKey);
   const model = node.data.model || '';
+
+  // 厂商图标 + 该能力的预估单价（来自 providers.js 的 PROVIDER_META）
+  const priceOf = (p) => (p && getProviderMeta(p.key).pricing[cap]) || '';
+  const iconOf = (p) => (p ? getProviderMeta(p.key).icon : '🧩');
 
   useEffect(() => {
     if (!open) return;
@@ -79,6 +83,13 @@ function ModelPicker({ cap, node, channels, set, onPickModel, onOpenChannel, onO
         </div>
       )}
 
+      {model && curProvider && (
+        <div className="mp-pbar">
+          <span className="mp-icon">{iconOf(curProvider)}</span>
+          <span>预计 {priceOf(curProvider) || '以厂商为准'} · {curProvider.name}</span>
+        </div>
+      )}
+
       {open && (
         <div className="mp-panel">
           <input
@@ -97,6 +108,7 @@ function ModelPicker({ cap, node, channels, set, onPickModel, onOpenChannel, onO
             <div className="mp-group" key={'c' + g.ch.id}>
               <div className="mp-ghead">
                 <span className="mp-dot" style={{ background: g.provider ? '#3fb950' : '#888' }} />
+                <span className="mp-icon">{iconOf(g.provider)}</span>
                 已配置 · {g.provider ? g.provider.name : g.ch.name}
               </div>
               {g.models.filter((m) => match(m, g.provider && g.provider.name)).map((m) => {
@@ -107,7 +119,9 @@ function ModelPicker({ cap, node, channels, set, onPickModel, onOpenChannel, onO
                     className={'mp-item' + (on ? ' on' : '')}
                     onClick={() => { set({ channelId: g.ch.id, model: m }); setOpen(false); }}
                   >
+                    <span className="mp-icon">{iconOf(g.provider)}</span>
                     <span className="mp-name">{m}</span>
+                    {priceOf(g.provider) && <span className="mp-price">{priceOf(g.provider)}</span>}
                     {on && <span className="mp-check">✓</span>}
                   </div>
                 );
@@ -119,18 +133,24 @@ function ModelPicker({ cap, node, channels, set, onPickModel, onOpenChannel, onO
             <div className="mp-group">
               <div className="mp-ghead">
                 <span className="mp-dot" style={{ background: '#7c5cff' }} />
-                可一键接入（点选即建渠道，填 Key 即用）
+                ⚡ 可一键接入（点选即建渠道，填 Key 即用）
               </div>
               {catProviders.map((p) => (
                 <div className="mp-provider" key={p.key}>
-                  <div className="mp-pname">{p.name}</div>
+                  <div className="mp-pname">
+                    <span className="mp-icon">{iconOf(p)}</span>
+                    {p.name}
+                    {priceOf(p) && <span className="mp-price muted">{priceOf(p)}</span>}
+                  </div>
                   {(p.models[cap] || []).filter((m) => match(m, p.name)).map((m) => (
                     <div
                       key={m}
                       className={'mp-item' + (model === m && curProvider && curProvider.key === p.key ? ' on' : '')}
                       onClick={() => { onPickModel(node.id, p.key, m); setOpen(false); }}
                     >
+                      <span className="mp-icon">{iconOf(p)}</span>
                       <span className="mp-name">{m}</span>
+                      {priceOf(p) && <span className="mp-price">{priceOf(p)}</span>}
                       {model === m && curProvider && curProvider.key === p.key && <span className="mp-check">✓</span>}
                     </div>
                   ))}
